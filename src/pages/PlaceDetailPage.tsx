@@ -7,7 +7,7 @@ import {
   Phone, 
   Share2, 
   Bookmark, 
-  Navigation, 
+  Navigation as NavigationIcon, 
   Sparkles, 
   Building2, 
   Warehouse, 
@@ -37,6 +37,8 @@ import {
   formatDistance 
 } from '../utils/persianUtils';
 import { useAppStore } from '../store/appStore';
+import { Navigation } from '../components/Navigation';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 /**
  * صفحه جزئیات کامل مسجد، حسینیه یا بقعه متبرکه در دزفول
@@ -44,7 +46,16 @@ import { useAppStore } from '../store/appStore';
 export const PlaceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { userLocation } = useAppStore();
+  const { userLocation, toggleDarkMode } = useAppStore();
+
+  useKeyboardShortcuts({
+    onOpenSearch: () => navigate('/?search=true'),
+    onCloseModals: () => navigate(-1),
+    onNavigateToMap: () => navigate('/?tab=map'),
+    onNavigateToEvents: () => navigate('/calendar'),
+    onNavigateToHome: () => navigate('/'),
+    onToggleDarkMode: () => toggleDarkMode()
+  });
 
   const [place, setPlace] = useState<Place | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -167,14 +178,28 @@ export const PlaceDetailPage: React.FC = () => {
   ).slice(0, 4);
 
   return (
-    <div className="min-h-screen bg-[#F7F3EC] dark:bg-slate-900 text-[#1F2430] dark:text-slate-100 pb-24 font-['Vazirmatn',sans-serif]">
-      {/* پیام Toast */}
-      {toastMsg && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#1F2430] dark:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl border border-white/20 dark:border-slate-700 animate-slideDown flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#E5B555] animate-pulse"></span>
-          <span>{toastMsg}</span>
-        </div>
-      )}
+    <div className="min-h-screen bg-[#F7F3EC] dark:bg-slate-900 text-[#1F2430] dark:text-slate-100 font-['Vazirmatn',sans-serif] flex flex-col md:flex-row">
+      <Navigation
+        activeTab="home"
+        onTabChange={(tab) => {
+          if (tab === 'home') navigate('/');
+          else if (tab === 'map') navigate('/?tab=map');
+          else if (tab === 'calendar') navigate('/calendar');
+          else if (tab === 'neighborhoods') navigate('/?tab=neighborhoods');
+          else if (tab === 'submit') navigate('/?submit=true');
+        }}
+        todayEventsCount={allEvents.filter((e) => e.isToday || e.isTonight).length}
+        onOpenSearch={() => navigate('/?search=true')}
+      />
+
+      <div className="flex-1 min-w-0 pb-24 md:pb-8 flex flex-col">
+        {/* پیام Toast */}
+        {toastMsg && (
+          <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#1F2430] dark:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl border border-white/20 dark:border-slate-700 animate-slideDown flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#E5B555] animate-pulse"></span>
+            <span>{toastMsg}</span>
+          </div>
+        )}
 
       {/* ۱. هدر تصویری بزرگ */}
       <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-stone-900">
@@ -256,7 +281,7 @@ export const PlaceDetailPage: React.FC = () => {
               onClick={() => setIsRoutingOpen(!isRoutingOpen)}
               className="w-full flex items-center justify-center gap-1.5 bg-[#0E7C86] hover:bg-[#0a5d65] dark:bg-teal-600 dark:hover:bg-teal-700 text-white py-2.5 px-3 rounded-2xl text-xs font-bold shadow-md transition-all"
             >
-              <Navigation className="w-4 h-4 text-[#E5B555]" />
+              <NavigationIcon className="w-4 h-4 text-[#E5B555]" />
               <span>مسیریابی هوشمند</span>
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
@@ -535,6 +560,7 @@ export const PlaceDetailPage: React.FC = () => {
           >
             اصلاح / تکمیل مشخصات مکان
           </button>
+        </div>
         </div>
       </div>
     </div>

@@ -53,8 +53,7 @@ export const MiniMap: React.FC<MiniMapProps> = ({
       L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
       // Create MarkerClusterGroup with Persian styled cluster icon
-      // @ts-expect-error markerClusterGroup is added by leaflet.markercluster plugin
-      const clusterGroup = L.markerClusterGroup({
+      const clusterGroup = (L as any).markerClusterGroup({
         showCoverageOnHover: false,
         maxClusterRadius: 40,
         spiderfyOnMaxZoom: true,

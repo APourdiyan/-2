@@ -23,10 +23,12 @@ import { SubmitEventModal } from '../components/SubmitEventModal';
 import { PrayerTimesModal } from '../components/PrayerTimesModal';
 import { NotificationModal } from '../components/NotificationModal';
 import { SearchModal } from '../components/SearchModal';
-import { BottomNavigation } from '../components/BottomNavigation';
-import { FullMapView } from '../components/FullMapView';
+import { Navigation } from '../components/Navigation';
+import { MapView } from '../components/MapView';
 import { toPersianDigits } from '../utils/persianUtils';
 import { useAppStore } from '../store/appStore';
+import { useDevice } from '../hooks/useDevice';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 /**
  * صفحه اصلی سامانه نقشه مذهبی دزفول
@@ -37,7 +39,8 @@ export const HomePage: React.FC = () => {
     userLocation, 
     setUserLocation,
     activeFilters,
-    toggleFilter
+    toggleFilter,
+    toggleDarkMode
   } = useAppStore();
 
   // داده‌های محلی
@@ -67,6 +70,22 @@ export const HomePage: React.FC = () => {
   const [savedReminderIds, setSavedReminderIds] = useState<string[]>(() => {
     const saved = localStorage.getItem('dezful_reminders');
     return saved ? JSON.parse(saved) : [];
+  });
+
+  // کلیدهای میانبر دسکتاپ (Keyboard Shortcuts)
+  useKeyboardShortcuts({
+    onOpenSearch: () => setIsSearchModalOpen(true),
+    onCloseModals: () => {
+      setIsSearchModalOpen(false);
+      setIsSubmitModalOpen(false);
+      setIsPrayerTimesOpen(false);
+      setIsNotificationsOpen(false);
+    },
+    onNavigateToMap: () => setActiveTab('map'),
+    onNavigateToEvents: () => navigate('/calendar'),
+    onNavigateToHome: () => setActiveTab('home'),
+    onToggleDarkMode: () => toggleDarkMode(),
+    onOpenSubmitEvent: () => setIsSubmitModalOpen(true)
   });
 
   // موقعیت مکانی
@@ -119,29 +138,53 @@ export const HomePage: React.FC = () => {
 
   const todayEventsCount = events.filter((e) => e.isToday || e.isTonight).length;
 
+  const { isMobile } = useDevice();
+
   return (
-    <div className="min-h-screen bg-[#F7F3EC] text-[#1F2430] pb-20 font-['Vazirmatn',sans-serif]">
-      {/* هدر بالایی */}
-      <Header
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onOpenSearchModal={() => setIsSearchModalOpen(true)}
+    <div className="min-h-screen bg-[#F7F3EC] dark:bg-slate-950 text-[#1F2430] dark:text-slate-100 font-['Vazirmatn',sans-serif] flex flex-col md:flex-row">
+      {/* ناوبری دوگانه: سایدبار Notion/Slack در دسکتاپ و تبلت، Bottom Navigation ۴ تبه در موبایل */}
+      <Navigation
+        activeTab={activeTab}
+        onTabChange={(tab) => {
+          if (tab === 'calendar') {
+            navigate('/calendar');
+          } else if (tab === 'submit') {
+            setIsSubmitModalOpen(true);
+          } else {
+            setActiveTab(tab);
+          }
+        }}
+        todayEventsCount={todayEventsCount}
+        onOpenSearch={() => setIsSearchModalOpen(true)}
         onOpenPrayerTimes={() => setIsPrayerTimesOpen(true)}
+        onOpenSubmitEvent={() => setIsSubmitModalOpen(true)}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
-        unreadRemindersCount={savedReminderIds.length}
+        unreadNotificationsCount={savedReminderIds.length}
       />
 
-      {/* نمایش بر اساس تب */}
-      {activeTab === 'map' ? (
-        <FullMapView
-          places={places}
-          onBack={() => setActiveTab('home')}
-          onSelectPlace={(p) => navigate(`/place/${p.id}`)}
-          userCoords={userLocation ? [userLocation.lat, userLocation.lng] : null}
-          onRequestUserLocation={handleRequestUserLocation}
+      {/* بخش اصلی محتوای صفحه */}
+      <div className="flex-1 min-w-0 pb-20 md:pb-8 flex flex-col">
+        {/* هدر بالایی */}
+        <Header
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onOpenSearchModal={() => setIsSearchModalOpen(true)}
+          onOpenPrayerTimes={() => setIsPrayerTimesOpen(true)}
+          onOpenNotifications={() => setIsNotificationsOpen(true)}
+          unreadRemindersCount={savedReminderIds.length}
         />
-      ) : activeTab === 'neighborhoods' ? (
-        <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+
+        {/* نمایش بر اساس تب */}
+        {activeTab === 'map' ? (
+          <MapView
+            places={places}
+            onBack={() => setActiveTab('home')}
+            onSelectPlace={(p) => navigate(`/place/${p.id}`)}
+            userCoords={userLocation ? [userLocation.lat, userLocation.lng] : null}
+            onRequestUserLocation={handleRequestUserLocation}
+          />
+        ) : activeTab === 'neighborhoods' ? (
+          <div className="max-w-4xl mx-auto px-4 py-6 space-y-4 w-full">
           <div className="flex items-center justify-between">
             <h2 className="text-base sm:text-lg font-black text-[#1F2430] flex items-center gap-2">
               <Layers className="w-5 h-5 text-[#0E7C86]" />
@@ -355,20 +398,7 @@ export const HomePage: React.FC = () => {
         />
       )}
 
-      {/* نوار ناوبری پایینی موبایل */}
-      <BottomNavigation
-        activeTab={activeTab}
-        onTabChange={(tab) => {
-          if (tab === 'calendar') {
-            navigate('/calendar');
-          } else if (tab === 'submit') {
-            setIsSubmitModalOpen(true);
-          } else {
-            setActiveTab(tab);
-          }
-        }}
-        todayEventsCount={todayEventsCount}
-      />
+      </div>
     </div>
   );
 };

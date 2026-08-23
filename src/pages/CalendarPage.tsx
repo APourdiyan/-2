@@ -8,7 +8,7 @@ import {
   Filter, 
   Bell, 
   BellRing, 
-  Navigation, 
+  Navigation as NavigationIcon, 
   Sparkles, 
   ChevronLeft, 
   Users, 
@@ -25,13 +25,24 @@ import { INITIAL_EVENTS, INITIAL_PLACES } from '../data/dezfulData';
 import { EventItem, EventCategory } from '../types';
 import { toPersianDigits, getRoutingLinks } from '../utils/persianUtils';
 import { useAppStore } from '../store/appStore';
+import { Navigation } from '../components/Navigation';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 /**
  * صفحه تقویم جامع مراسمات و رویدادهای مذهبی دزفول (/calendar)
  */
 export const CalendarPage: React.FC = () => {
   const navigate = useNavigate();
-  const { userLocation } = useAppStore();
+  const { userLocation, toggleDarkMode } = useAppStore();
+
+  useKeyboardShortcuts({
+    onOpenSearch: () => navigate('/?search=true'),
+    onCloseModals: () => navigate(-1),
+    onNavigateToMap: () => navigate('/?tab=map'),
+    onNavigateToEvents: () => {},
+    onNavigateToHome: () => navigate('/'),
+    onToggleDarkMode: () => toggleDarkMode()
+  });
 
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -140,14 +151,27 @@ export const CalendarPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F3EC] text-[#1F2430] pb-24 font-['Vazirmatn',sans-serif]">
-      {/* پیام Toast */}
-      {toastMsg && (
-        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#1F2430] text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl border border-white/20 animate-slideDown flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#E5B555] animate-pulse"></span>
-          <span>{toastMsg}</span>
-        </div>
-      )}
+    <div className="min-h-screen bg-[#F7F3EC] dark:bg-slate-950 text-[#1F2430] dark:text-slate-100 font-['Vazirmatn',sans-serif] flex flex-col md:flex-row">
+      <Navigation
+        activeTab="calendar"
+        onTabChange={(tab) => {
+          if (tab === 'home') navigate('/');
+          else if (tab === 'map') navigate('/?tab=map');
+          else if (tab === 'neighborhoods') navigate('/?tab=neighborhoods');
+          else if (tab === 'submit') navigate('/?submit=true');
+        }}
+        todayEventsCount={events.filter((e) => e.isToday || e.isTonight).length}
+        onOpenSearch={() => navigate('/?search=true')}
+      />
+
+      <div className="flex-1 min-w-0 pb-24 md:pb-8 flex flex-col">
+        {/* پیام Toast */}
+        {toastMsg && (
+          <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#1F2430] text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl border border-white/20 animate-slideDown flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#E5B555] animate-pulse"></span>
+            <span>{toastMsg}</span>
+          </div>
+        )}
 
       {/* هدر صفحه تقویم */}
       <div className="bg-[#1F2430] text-white pt-6 pb-8 px-4 border-b border-[#3A4050]">
@@ -327,7 +351,7 @@ export const CalendarPage: React.FC = () => {
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 bg-[#F7F3EC] hover:bg-[#E4DCB] text-[#1F2430] border border-[#DDD5C5] py-2 px-3 rounded-xl text-xs font-bold"
                     >
-                      <Navigation className="w-3.5 h-3.5 text-[#B4552D]" />
+                      <NavigationIcon className="w-3.5 h-3.5 text-[#B4552D]" />
                       <span>مسیریابی</span>
                     </a>
                   </div>
@@ -336,6 +360,7 @@ export const CalendarPage: React.FC = () => {
             })}
           </div>
         )}
+        </div>
       </div>
     </div>
   );
