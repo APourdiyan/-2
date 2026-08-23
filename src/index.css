@@ -1,9 +1,60 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   * {
     font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
+}
+
+/* Marker Cluster Styles */
+.leaflet-cluster-anim .leaflet-marker-icon,
+.leaflet-cluster-anim .leaflet-marker-shadow {
+  transition: transform 0.3s ease-out, opacity 0.3s ease-in;
+}
+
+.custom-cluster-icon {
+  background: transparent;
+  border: none;
+}
+
+.dezful-cluster-marker {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #0E7C86 0%, #084c53 100%);
+  border: 3px solid #FFFFFF;
+  box-shadow: 0 4px 14px rgba(14, 124, 134, 0.45), 0 2px 6px rgba(0,0,0,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  user-select: none;
+}
+
+.dezful-cluster-marker:hover {
+  transform: scale(1.15);
+  box-shadow: 0 6px 18px rgba(14, 124, 134, 0.6), 0 3px 8px rgba(0,0,0,0.3);
+}
+
+.dezful-cluster-marker.cluster-large {
+  width: 52px;
+  height: 52px;
+  font-size: 17px;
+  background: radial-gradient(circle at 30% 30%, #B4552D 0%, #7e3618 100%);
+  box-shadow: 0 4px 14px rgba(180, 85, 45, 0.5), 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.dezful-cluster-marker.cluster-medium {
+  width: 46px;
+  height: 46px;
+  font-size: 15px;
+  background: radial-gradient(circle at 30% 30%, #0E7C86 0%, #084c53 100%);
 }
 
 /* Custom scrollbars */
@@ -14,9 +65,15 @@
 ::-webkit-scrollbar-track {
   background: #F0EAE1;
 }
+.dark ::-webkit-scrollbar-track {
+  background: #1e293b;
+}
 ::-webkit-scrollbar-thumb {
   background: #C4B9A7;
   border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #0E7C86;
@@ -52,6 +109,10 @@
   text-align: right;
   font-family: 'Vazirmatn', sans-serif !important;
 }
+.dark .leaflet-popup-content-wrapper {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+}
 .leaflet-popup-content {
   margin: 0 !important;
   line-height: 1.5 !important;
@@ -59,4 +120,5 @@
 .leaflet-container {
   font-family: 'Vazirmatn', sans-serif !important;
 }
+
 

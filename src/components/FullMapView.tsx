@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
+import 'leaflet.markercluster';
 import { 
   ArrowRight, 
   Layers, 
@@ -39,6 +40,7 @@ import {
   DEZFUL_PRAYER_TIMES 
 } from '../utils/persianUtils';
 import { INITIAL_NEIGHBORHOODS } from '../data/dezfulData';
+import { EmptyState } from './EmptyState';
 
 interface FullMapViewProps {
   places: Place[];
@@ -85,7 +87,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersGroupRef = useRef<L.LayerGroup | null>(null);
+  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
   const userMarkerRef = useRef<L.Marker | null>(null);
 
   // View state
@@ -194,7 +196,30 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
         attribution: '&copy; OpenStreetMap'
       }).addTo(map);
 
-      markersGroupRef.current = L.layerGroup().addTo(map);
+      // Create MarkerClusterGroup
+      // @ts-expect-error markerClusterGroup is added by leaflet.markercluster plugin
+      const clusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 40,
+        spiderfyOnMaxZoom: true,
+        iconCreateFunction: (cluster: any) => {
+          const childCount = cluster.getChildCount();
+          const persianCount = toPersianDigits(childCount);
+          let sizeClass = 'cluster-small';
+          if (childCount >= 10) sizeClass = 'cluster-large';
+          else if (childCount >= 5) sizeClass = 'cluster-medium';
+
+          return L.divIcon({
+            html: `<div class="dezful-cluster-marker ${sizeClass}"><span>${persianCount}</span></div>`,
+            className: 'custom-cluster-icon',
+            iconSize: L.point(44, 44),
+            iconAnchor: [22, 22]
+          });
+        }
+      });
+
+      map.addLayer(clusterGroup);
+      clusterGroupRef.current = clusterGroup;
       mapInstanceRef.current = map;
     }
 
@@ -216,10 +241,12 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
   useEffect(() => {
     if (viewMode !== 'map') return;
     const map = mapInstanceRef.current;
-    const markersGroup = markersGroupRef.current;
-    if (!map || !markersGroup) return;
+    const clusterGroup = clusterGroupRef.current;
+    if (!map || !clusterGroup) return;
 
-    markersGroup.clearLayers();
+    clusterGroup.clearLayers();
+
+    const markers: L.Marker[] = [];
 
     filteredPlaces.forEach((place) => {
       const isHistorical = place.isHistorical;
@@ -227,10 +254,6 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
       const isShrine = place.type === 'shrine';
       const isSelected = selectedPinPlace?.id === place.id;
 
-      // Color coding:
-      // Mosque: Turquoise #0E7C86
-      // Hussainiya: Brick #B4552D
-      // Shrine: Emerald/Gold Accent
       let bgColor = '#0E7C86';
       if (isHussainiya) bgColor = '#B4552D';
       if (isShrine) bgColor = '#0E7C86';
@@ -274,8 +297,10 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
         map.flyTo(place.coordinates, 16, { duration: 0.7 });
       });
 
-      markersGroup.addLayer(marker);
+      markers.push(marker);
     });
+
+    clusterGroup.addLayers(markers);
 
     // Render User Location
     if (userCoords) {
@@ -294,7 +319,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
       if (userMarkerRef.current) {
         userMarkerRef.current.setLatLng(userCoords);
       } else {
-        userMarkerRef.current = L.marker(userCoords, { icon: userIcon }).addTo(markersGroup);
+        userMarkerRef.current = L.marker(userCoords, { icon: userIcon }).addTo(map);
       }
     }
   }, [filteredPlaces, selectedPinPlace, userCoords, viewMode]);
@@ -339,14 +364,14 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
   };
 
   return (
-    <div className="relative w-full h-[calc(100vh-65px)] pb-16 flex flex-col bg-[#F7F3EC] overflow-hidden">
+    <div className="relative w-full h-[calc(100vh-65px)] pb-16 flex flex-col bg-[#F7F3EC] dark:bg-slate-950 overflow-hidden transition-colors">
       {/* 1. FLOATING TOP BAR */}
       <div className="absolute top-2 sm:top-3 right-2 sm:right-3 left-2 sm:left-3 z-[400] max-w-2xl mx-auto flex flex-col gap-2 pointer-events-auto">
-        <div className="flex items-center gap-2 bg-white/95 backdrop-blur-md p-1.5 sm:p-2 rounded-2xl border border-[#DDD5C5] shadow-lg">
+        <div className="flex items-center gap-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md p-1.5 sm:p-2 rounded-2xl border border-[#DDD5C5] dark:border-slate-700 shadow-lg transition-colors">
           {/* Back button */}
           <button
             onClick={onBack}
-            className="w-9 h-9 rounded-xl bg-[#F7F3EC] hover:bg-[#E4DCB] flex items-center justify-center text-[#1F2430] shrink-0 transition-colors"
+            className="w-9 h-9 rounded-xl bg-[#F7F3EC] dark:bg-slate-800 hover:bg-[#E4DCB] dark:hover:bg-slate-700 flex items-center justify-center text-[#1F2430] dark:text-slate-100 shrink-0 transition-colors"
             title="بازگشت به خانه"
           >
             <ArrowRight className="w-5 h-5" />
@@ -359,13 +384,13 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="جستجوی مسجد، حسینیه، بقعه یا محله..."
-              className="w-full bg-[#F7F3EC] border border-[#DDD5C5] rounded-xl pr-8 pl-7 py-1.5 text-xs text-[#1F2430] placeholder-[#8C8474] focus:outline-none focus:border-[#0E7C86] transition-all"
+              className="w-full bg-[#F7F3EC] dark:bg-slate-800 border border-[#DDD5C5] dark:border-slate-700 rounded-xl pr-8 pl-7 py-1.5 text-xs text-[#1F2430] dark:text-slate-100 placeholder-[#8C8474] dark:placeholder-slate-400 focus:outline-none focus:border-[#0E7C86] dark:focus:border-teal-500 transition-all"
             />
-            <Search className="w-3.5 h-3.5 text-[#8C8474] absolute right-2.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-[#8C8474] dark:text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2" />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8C8474] hover:text-[#1F2430]"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8C8474] dark:text-slate-400 hover:text-[#1F2430] dark:hover:text-slate-100"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -373,13 +398,13 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
           </div>
 
           {/* Map / List View Segmented Switch */}
-          <div className="flex items-center bg-[#F7F3EC] p-0.5 rounded-xl border border-[#DDD5C5] shrink-0">
+          <div className="flex items-center bg-[#F7F3EC] dark:bg-slate-800 p-0.5 rounded-xl border border-[#DDD5C5] dark:border-slate-700 shrink-0">
             <button
               onClick={() => setViewMode('map')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                 viewMode === 'map'
-                  ? 'bg-[#0E7C86] text-white shadow-xs'
-                  : 'text-[#52525B] hover:text-[#1F2430]'
+                  ? 'bg-[#0E7C86] dark:bg-teal-600 text-white shadow-xs'
+                  : 'text-[#52525B] dark:text-slate-400 hover:text-[#1F2430] dark:hover:text-slate-200'
               }`}
               title="نمای نقشه"
             >
@@ -390,15 +415,15 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
               onClick={() => setViewMode('list')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                 viewMode === 'list'
-                  ? 'bg-[#0E7C86] text-white shadow-xs'
-                  : 'text-[#52525B] hover:text-[#1F2430]'
+                  ? 'bg-[#0E7C86] dark:bg-teal-600 text-white shadow-xs'
+                  : 'text-[#52525B] dark:text-slate-400 hover:text-[#1F2430] dark:hover:text-slate-200'
               }`}
               title="نمای لیست"
             >
               <ListIcon className="w-3.5 h-3.5" />
               <span>لیست</span>
               <span className={`text-[10px] px-1 py-0.2 rounded-full font-black ${
-                viewMode === 'list' ? 'bg-white/20 text-white' : 'bg-[#DDD5C5] text-[#1F2430]'
+                viewMode === 'list' ? 'bg-white/20 text-white' : 'bg-[#DDD5C5] dark:bg-slate-700 text-[#1F2430] dark:text-slate-200'
               }`}>
                 {toPersianDigits(filteredPlaces.length)}
               </span>
@@ -411,7 +436,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all shrink-0 ${
               activeFiltersCount > 0
                 ? 'bg-[#B4552D] text-white border-[#B4552D] shadow-xs'
-                : 'bg-[#F7F3EC] hover:bg-[#E4DCB] text-[#1F2430] border-[#DDD5C5]'
+                : 'bg-[#F7F3EC] dark:bg-slate-800 hover:bg-[#E4DCB] dark:hover:bg-slate-700 text-[#1F2430] dark:text-slate-200 border-[#DDD5C5] dark:border-slate-700'
             }`}
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -430,8 +455,8 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             onClick={() => setFilters((prev) => ({ ...prev, type: 'all' }))}
             className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap backdrop-blur-md border transition-all ${
               filters.type === 'all'
-                ? 'bg-[#1F2430] text-white border-[#1F2430] shadow-xs'
-                : 'bg-white/90 text-[#52525B] border-[#DDD5C5] hover:bg-white'
+                ? 'bg-[#1F2430] dark:bg-teal-700 text-white border-[#1F2430] dark:border-teal-600 shadow-xs'
+                : 'bg-white/90 dark:bg-slate-900/90 text-[#52525B] dark:text-slate-300 border-[#DDD5C5] dark:border-slate-700 hover:bg-white'
             }`}
           >
             همه ({toPersianDigits(places.length)})
@@ -440,11 +465,11 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             onClick={() => setFilters((prev) => ({ ...prev, type: prev.type === 'mosque' ? 'all' : 'mosque' }))}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap backdrop-blur-md border transition-all ${
               filters.type === 'mosque'
-                ? 'bg-[#0E7C86] text-white border-[#0E7C86] shadow-xs'
-                : 'bg-white/90 text-[#52525B] border-[#DDD5C5] hover:bg-white'
+                ? 'bg-[#0E7C86] dark:bg-teal-600 text-white border-[#0E7C86] shadow-xs'
+                : 'bg-white/90 dark:bg-slate-900/90 text-[#52525B] dark:text-slate-300 border-[#DDD5C5] dark:border-slate-700 hover:bg-white'
             }`}
           >
-            <span className="w-2 h-2 rounded-full bg-[#0E7C86]" />
+            <span className="w-2 h-2 rounded-full bg-[#0E7C86] dark:bg-teal-400" />
             مساجد
           </button>
           <button
@@ -452,7 +477,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap backdrop-blur-md border transition-all ${
               filters.type === 'hussainiya'
                 ? 'bg-[#B4552D] text-white border-[#B4552D] shadow-xs'
-                : 'bg-white/90 text-[#52525B] border-[#DDD5C5] hover:bg-white'
+                : 'bg-white/90 dark:bg-slate-900/90 text-[#52525B] dark:text-slate-300 border-[#DDD5C5] dark:border-slate-700 hover:bg-white'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-[#B4552D]" />
@@ -462,8 +487,8 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             onClick={() => setFilters((prev) => ({ ...prev, type: prev.type === 'shrine' ? 'all' : 'shrine' }))}
             className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap backdrop-blur-md border transition-all ${
               filters.type === 'shrine'
-                ? 'bg-[#0E7C86] text-white border-[#0E7C86] shadow-xs'
-                : 'bg-white/90 text-[#52525B] border-[#DDD5C5] hover:bg-white'
+                ? 'bg-[#0E7C86] dark:bg-teal-600 text-white border-[#0E7C86] shadow-xs'
+                : 'bg-white/90 dark:bg-slate-900/90 text-[#52525B] dark:text-slate-300 border-[#DDD5C5] dark:border-slate-700 hover:bg-white'
             }`}
           >
             <Sparkles className="w-3 h-3 text-[#E5B555]" />
@@ -474,7 +499,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap backdrop-blur-md border transition-all ${
               filters.openOnly
                 ? 'bg-emerald-700 text-white border-emerald-700 shadow-xs'
-                : 'bg-white/90 text-[#52525B] border-[#DDD5C5] hover:bg-white'
+                : 'bg-white/90 dark:bg-slate-900/90 text-[#52525B] dark:text-slate-300 border-[#DDD5C5] dark:border-slate-700 hover:bg-white'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -488,7 +513,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             className={`flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap backdrop-blur-md border transition-all ${
               filters.facilities.shovadoon
                 ? 'bg-[#B4552D] text-white border-[#B4552D] shadow-xs'
-                : 'bg-white/90 text-[#52525B] border-[#DDD5C5] hover:bg-white'
+                : 'bg-white/90 dark:bg-slate-900/90 text-[#52525B] dark:text-slate-300 border-[#DDD5C5] dark:border-slate-700 hover:bg-white'
             }`}
           >
             <Warehouse className="w-3 h-3 text-[#E5B555]" />
@@ -506,24 +531,24 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
           {/* My Location GPS Button */}
           <button
             onClick={handleCenterOnUser}
-            className="w-11 h-11 rounded-2xl bg-white hover:bg-[#F7F3EC] text-[#0E7C86] border border-[#DDD5C5] shadow-xl flex items-center justify-center transition-all active:scale-95 group"
+            className="w-11 h-11 rounded-2xl bg-white dark:bg-slate-800 hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-[#0E7C86] dark:text-teal-400 border border-[#DDD5C5] dark:border-slate-700 shadow-xl flex items-center justify-center transition-all active:scale-95 group"
             title="موقعیت من"
           >
-            <Navigation2 className="w-5 h-5 group-hover:scale-110 transition-transform text-[#0E7C86]" />
+            <Navigation2 className="w-5 h-5 group-hover:scale-110 transition-transform" />
           </button>
 
           {/* Zoom In & Out */}
-          <div className="flex flex-col bg-white rounded-2xl border border-[#DDD5C5] shadow-xl overflow-hidden">
+          <div className="flex flex-col bg-white dark:bg-slate-800 rounded-2xl border border-[#DDD5C5] dark:border-slate-700 shadow-xl overflow-hidden">
             <button
               onClick={handleZoomIn}
-              className="w-10 h-10 flex items-center justify-center text-[#1F2430] hover:bg-[#F7F3EC] border-b border-[#DDD5C5] transition-colors"
+              className="w-10 h-10 flex items-center justify-center text-[#1F2430] dark:text-slate-200 hover:bg-[#F7F3EC] dark:hover:bg-slate-700 border-b border-[#DDD5C5] dark:border-slate-700 transition-colors"
               title="بزرگ‌نمایی"
             >
               <Plus className="w-4 h-4" />
             </button>
             <button
               onClick={handleZoomOut}
-              className="w-10 h-10 flex items-center justify-center text-[#1F2430] hover:bg-[#F7F3EC] transition-colors"
+              className="w-10 h-10 flex items-center justify-center text-[#1F2430] dark:text-slate-200 hover:bg-[#F7F3EC] dark:hover:bg-slate-700 transition-colors"
               title="کوچک‌نمایی"
             >
               <Minus className="w-4 h-4" />
@@ -532,7 +557,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
         </div>
 
         {/* Results Counter on Map */}
-        <div className="absolute bottom-20 left-3 z-[400] bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#DDD5C5] shadow-md text-xs font-bold text-[#1F2430] pointer-events-auto">
+        <div className="absolute bottom-20 left-3 z-[400] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#DDD5C5] dark:border-slate-700 shadow-md text-xs font-bold text-[#1F2430] dark:text-slate-200 pointer-events-auto">
           <span>نمایش {toPersianDigits(filteredPlaces.length)} مکان</span>
         </div>
       </div>
@@ -541,18 +566,18 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
       {viewMode === 'list' && (
         <div className="w-full h-full overflow-y-auto pt-24 pb-20 px-3 sm:px-4 max-w-4xl mx-auto space-y-3">
           {/* Sorting Header */}
-          <div className="flex items-center justify-between bg-white rounded-2xl p-3 border border-[#E0D8C8] shadow-xs text-xs">
-            <div className="font-bold text-[#1F2430] flex items-center gap-1.5">
+          <div className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-2xl p-3 border border-[#E0D8C8] dark:border-slate-700 shadow-xs text-xs">
+            <div className="font-bold text-[#1F2430] dark:text-slate-200 flex items-center gap-1.5">
               <span>تعداد کل نتایج:</span>
-              <span className="text-[#0E7C86] font-black">{toPersianDigits(sortedPlaces.length)} مکان</span>
+              <span className="text-[#0E7C86] dark:text-teal-400 font-black">{toPersianDigits(sortedPlaces.length)} مکان</span>
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-[#71717A]">مرتب‌سازی:</span>
+              <span className="text-[#71717A] dark:text-slate-400">مرتب‌سازی:</span>
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-[#F7F3EC] border border-[#DDD5C5] rounded-xl px-2.5 py-1 font-bold text-[#1F2430] focus:outline-none"
+                className="bg-[#F7F3EC] dark:bg-slate-800 border border-[#DDD5C5] dark:border-slate-700 rounded-xl px-2.5 py-1 font-bold text-[#1F2430] dark:text-slate-200 focus:outline-none"
               >
                 <option value="distance">نزدیک‌ترین به من</option>
                 <option value="popular">محبوب‌ترین و شاخص</option>
@@ -563,17 +588,13 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
 
           {/* Empty State */}
           {sortedPlaces.length === 0 ? (
-            <div className="bg-white rounded-3xl p-10 text-center border border-[#E0D8C8] space-y-3">
-              <Building2 className="w-12 h-12 text-[#C4B9A7] mx-auto" />
-              <h4 className="text-base font-black text-[#1F2430]">مکانی با فیلترهای انتخابی یافت نشد</h4>
-              <p className="text-xs text-[#71717A]">می‌توانید فیلترهای جستجو را پاک کنید تا تمامی اماکن دزفول نمایش داده شوند.</p>
-              <button
-                onClick={handleClearFilters}
-                className="bg-[#0E7C86] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#0a5d65] shadow-xs"
-              >
-                پاک کردن فیلترها
-              </button>
-            </div>
+            <EmptyState
+              icon={Building2}
+              title="مکانی با فیلترهای انتخابی یافت نشد"
+              description="می‌توانید فیلترهای جستجو را پاک کنید تا تمامی اماکن دزفول مجدداً نمایش داده شوند."
+              onReset={handleClearFilters}
+              resetButtonText="پاک‌کردن فیلترها و مشاهده همه"
+            />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {sortedPlaces.map((place) => {
@@ -586,11 +607,11 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                 return (
                   <div
                     key={place.id}
-                    className="bg-white rounded-3xl p-4 border border-[#E0D8C8] hover:border-[#0E7C86] shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                    className="bg-white dark:bg-slate-900 rounded-3xl p-4 border border-[#E0D8C8] dark:border-slate-700 hover:border-[#0E7C86] dark:hover:border-teal-500 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
                   >
                     <div>
                       {/* Card Top Image + Badges */}
-                      <div className="relative h-36 rounded-2xl overflow-hidden mb-3 border border-[#E0D8C8]">
+                      <div className="relative h-36 rounded-2xl overflow-hidden mb-3 border border-[#E0D8C8] dark:border-slate-700">
                         <img
                           src={place.image}
                           alt={place.name}
@@ -639,32 +660,32 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                       </div>
 
                       {/* Description & Address */}
-                      <p className="text-xs text-[#52525B] line-clamp-2 mb-2.5 leading-relaxed">
+                      <p className="text-xs text-[#52525B] dark:text-slate-400 line-clamp-2 mb-2.5 leading-relaxed">
                         {place.description}
                       </p>
 
                       {/* Facility Tags */}
                       <div className="flex flex-wrap items-center gap-1.5 mb-3 text-[10px] font-bold">
                         {place.features.shovadoon && (
-                          <span className="bg-[#F7F3EC] text-[#B4552D] border border-[#DDD5C5] px-2 py-0.5 rounded-lg flex items-center gap-1">
-                            <Warehouse className="w-3 h-3 text-[#B4552D]" />
+                          <span className="bg-[#F7F3EC] dark:bg-slate-800 text-[#B4552D] dark:text-amber-400 border border-[#DDD5C5] dark:border-slate-700 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                            <Warehouse className="w-3 h-3 text-[#B4552D] dark:text-amber-400" />
                             شوادون {toPersianDigits(place.features.shovadoonDepthMeters || 12)} متری
                           </span>
                         )}
                         {place.features.ladiesSection && (
-                          <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-lg flex items-center gap-1">
                             <Users className="w-3 h-3 text-emerald-600" />
                             بخش بانوان
                           </span>
                         )}
                         {place.features.parking && (
-                          <span className="bg-blue-50 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-lg flex items-center gap-1">
                             <Car className="w-3 h-3 text-blue-600" />
                             پارکینگ
                           </span>
                         )}
                         {place.features.wheelchairAccess && (
-                          <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-lg flex items-center gap-1">
+                          <span className="bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-lg flex items-center gap-1">
                             <Accessibility className="w-3 h-3 text-purple-600" />
                             دسترسی آسان
                           </span>
@@ -673,10 +694,10 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                     </div>
 
                     {/* Actions Row */}
-                    <div className="flex items-center gap-2 pt-2.5 border-t border-[#F2ECE1] relative">
+                    <div className="flex items-center gap-2 pt-2.5 border-t border-[#F2ECE1] dark:border-slate-800 relative">
                       <button
                         onClick={() => onSelectPlace(place)}
-                        className="flex-1 bg-[#0E7C86] hover:bg-[#0a5d65] text-white py-2 px-3 rounded-xl text-xs font-bold transition-all text-center"
+                        className="flex-1 bg-[#0E7C86] hover:bg-[#0a5d65] dark:bg-teal-600 dark:hover:bg-teal-700 text-white py-2 px-3 rounded-xl text-xs font-bold transition-all text-center"
                       >
                         مشاهده جزئیات کامل
                       </button>
@@ -684,7 +705,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                       <div className="relative">
                         <button
                           onClick={() => setActiveRoutingPlaceId(isMenuOpen ? null : place.id)}
-                          className="flex items-center gap-1 bg-[#F7F3EC] hover:bg-[#E4DCB] text-[#1F2430] border border-[#DDD5C5] py-2 px-3 rounded-xl text-xs font-bold"
+                          className="flex items-center gap-1 bg-[#F7F3EC] dark:bg-slate-800 hover:bg-[#E4DCB] dark:hover:bg-slate-700 text-[#1F2430] dark:text-slate-200 border border-[#DDD5C5] dark:border-slate-700 py-2 px-3 rounded-xl text-xs font-bold"
                         >
                           <Navigation className="w-3.5 h-3.5 text-[#B4552D]" />
                           <span>مسیریابی</span>
@@ -692,10 +713,10 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                         </button>
 
                         {isMenuOpen && (
-                          <div className="absolute bottom-full mb-1 left-0 w-36 bg-white rounded-2xl p-1.5 border border-[#DDD5C5] shadow-xl z-30">
-                            <a href={routing.neshan} target="_blank" rel="noopener noreferrer" className="block w-full text-right p-1.5 rounded-lg hover:bg-[#F7F3EC] text-xs font-bold text-[#185ADB]">نشان</a>
-                            <a href={routing.balad} target="_blank" rel="noopener noreferrer" className="block w-full text-right p-1.5 rounded-lg hover:bg-[#F7F3EC] text-xs font-bold text-[#00A859]">بلد</a>
-                            <a href={routing.googleMaps} target="_blank" rel="noopener noreferrer" className="block w-full text-right p-1.5 rounded-lg hover:bg-[#F7F3EC] text-xs font-bold text-[#EA4335]">گوگل مپ</a>
+                          <div className="absolute bottom-full mb-1 left-0 w-36 bg-white dark:bg-slate-800 rounded-2xl p-1.5 border border-[#DDD5C5] dark:border-slate-700 shadow-xl z-30">
+                            <a href={routing.neshan} target="_blank" rel="noopener noreferrer" className="block w-full text-right p-1.5 rounded-lg hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-xs font-bold text-[#185ADB] dark:text-blue-400">نشان</a>
+                            <a href={routing.balad} target="_blank" rel="noopener noreferrer" className="block w-full text-right p-1.5 rounded-lg hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-xs font-bold text-[#00A859] dark:text-emerald-400">بلد</a>
+                            <a href={routing.googleMaps} target="_blank" rel="noopener noreferrer" className="block w-full text-right p-1.5 rounded-lg hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-xs font-bold text-[#EA4335] dark:text-red-400">گوگل مپ</a>
                           </div>
                         )}
                       </div>
@@ -710,14 +731,14 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
 
       {/* 4. PIN CLICK BOTTOM SHEET CARD (ON MAP) */}
       {viewMode === 'map' && selectedPinPlace && (
-        <div className="absolute bottom-20 right-3 left-3 z-[400] max-w-lg mx-auto bg-white/95 backdrop-blur-md rounded-3xl p-4 border border-[#DDD5C5] shadow-2xl animate-slideUp pointer-events-auto">
+        <div className="absolute bottom-20 right-3 left-3 z-[400] max-w-lg mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-3xl p-4 border border-[#DDD5C5] dark:border-slate-700 shadow-2xl animate-slideUp pointer-events-auto">
           <div className="flex items-start justify-between gap-3">
             {/* Thumbnail */}
             <img
               src={selectedPinPlace.image}
               alt={selectedPinPlace.name}
               referrerPolicy="no-referrer"
-              className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl object-cover shrink-0 border border-[#E0D8C8]"
+              className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl object-cover shrink-0 border border-[#E0D8C8] dark:border-slate-700"
             />
 
             {/* Info */}
@@ -740,17 +761,17 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                 )}
               </div>
 
-              <h4 className="text-sm sm:text-base font-black text-[#1F2430] truncate mt-0.5">
+              <h4 className="text-sm sm:text-base font-black text-[#1F2430] dark:text-slate-100 truncate mt-0.5">
                 {selectedPinPlace.name}
               </h4>
-              <p className="text-[11px] text-[#71717A] truncate mt-0.5">
+              <p className="text-[11px] text-[#71717A] dark:text-slate-400 truncate mt-0.5">
                 {selectedPinPlace.neighborhood}
               </p>
 
               {/* Next Prayer / Feature note */}
-              <div className="flex items-center gap-2 mt-1.5 text-[10px] text-[#52525B]">
-                <span className="flex items-center gap-1 bg-[#F7F3EC] px-1.5 py-0.5 rounded-md font-bold">
-                  <Clock className="w-3 h-3 text-[#0E7C86]" />
+              <div className="flex items-center gap-2 mt-1.5 text-[10px] text-[#52525B] dark:text-slate-400">
+                <span className="flex items-center gap-1 bg-[#F7F3EC] dark:bg-slate-800 px-1.5 py-0.5 rounded-md font-bold text-[#1F2430] dark:text-slate-200">
+                  <Clock className="w-3 h-3 text-[#0E7C86] dark:text-teal-400" />
                   نماز بعدی: {DEZFUL_PRAYER_TIMES.maghrib}
                 </span>
                 {selectedPinPlace.features.shovadoon && (
@@ -764,17 +785,17 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             {/* Close pin card */}
             <button
               onClick={() => setSelectedPinPlace(null)}
-              className="p-1 text-[#71717A] hover:text-[#1F2430] rounded-xl hover:bg-[#F7F3EC] shrink-0"
+              className="p-1 text-[#71717A] hover:text-[#1F2430] dark:hover:text-slate-100 rounded-xl hover:bg-[#F7F3EC] dark:hover:bg-slate-800 shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[#F2ECE1] relative">
+          <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[#F2ECE1] dark:border-slate-800 relative">
             <button
               onClick={() => onSelectPlace(selectedPinPlace)}
-              className="flex-1 py-2 px-3 rounded-xl bg-[#0E7C86] hover:bg-[#0a5d65] text-white text-xs font-bold shadow-xs transition-colors text-center"
+              className="flex-1 py-2 px-3 rounded-xl bg-[#0E7C86] hover:bg-[#0a5d65] dark:bg-teal-600 dark:hover:bg-teal-700 text-white text-xs font-bold shadow-xs transition-colors text-center"
             >
               مشاهده جزئیات
             </button>
@@ -787,7 +808,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                 <div className="flex-1 relative">
                   <button
                     onClick={() => setActiveRoutingPlaceId(isRoutingOpen ? null : selectedPinPlace.id)}
-                    className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#F7F3EC] hover:bg-[#E4DCB] text-[#1F2430] border border-[#DDD5C5] text-xs font-bold transition-colors"
+                    className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#F7F3EC] dark:bg-slate-800 hover:bg-[#E4DCB] dark:hover:bg-slate-700 text-[#1F2430] dark:text-slate-200 border border-[#DDD5C5] dark:border-slate-700 text-xs font-bold transition-colors"
                   >
                     <Navigation className="w-3.5 h-3.5 text-[#B4552D]" />
                     <span>مسیریابی</span>
@@ -795,11 +816,11 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                   </button>
 
                   {isRoutingOpen && (
-                    <div className="absolute bottom-full mb-1 left-0 right-0 bg-white rounded-2xl p-1.5 border border-[#DDD5C5] shadow-2xl z-30">
+                    <div className="absolute bottom-full mb-1 left-0 right-0 bg-white dark:bg-slate-800 rounded-2xl p-1.5 border border-[#DDD5C5] dark:border-slate-700 shadow-2xl z-30">
                       <div className="grid grid-cols-3 gap-1 text-center text-xs font-bold">
-                        <a href={routing.neshan} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-[#F7F3EC] text-[#185ADB]">نشان</a>
-                        <a href={routing.balad} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-[#F7F3EC] text-[#00A859]">بلد</a>
-                        <a href={routing.googleMaps} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-[#F7F3EC] text-[#EA4335]">گوگل</a>
+                        <a href={routing.neshan} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-[#185ADB] dark:text-blue-400">نشان</a>
+                        <a href={routing.balad} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-[#00A859] dark:text-emerald-400">بلد</a>
+                        <a href={routing.googleMaps} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-lg hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-[#EA4335] dark:text-red-400">گوگل</a>
                       </div>
                     </div>
                   )}
@@ -813,22 +834,22 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
       {/* 5. ADVANCED FILTERS BOTTOM SHEET / MODAL */}
       {isFilterDrawerOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs animate-fadeIn">
-          <div className="relative w-full max-w-lg bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-[#E0D8C8] max-h-[88vh] flex flex-col overflow-hidden animate-slideUp">
+          <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl shadow-2xl border border-[#E0D8C8] dark:border-slate-700 max-h-[88vh] flex flex-col overflow-hidden animate-slideUp">
             {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-[#F2ECE1] flex items-center justify-between bg-white">
+            <div className="p-4 sm:p-5 border-b border-[#F2ECE1] dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
               <div className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-xl bg-[#0E7C86]/10 text-[#0E7C86] flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-[#0E7C86]/10 dark:bg-teal-500/10 text-[#0E7C86] dark:text-teal-400 flex items-center justify-center">
                   <SlidersHorizontal className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-[#1F2430]">فیلترهای پیشرفته نقشه دزفول</h3>
-                  <p className="text-[11px] text-[#71717A]">انتخاب دقیق اماکن، محلات و امکانات</p>
+                  <h3 className="text-base font-black text-[#1F2430] dark:text-slate-100">فیلترهای پیشرفته نقشه دزفول</h3>
+                  <p className="text-[11px] text-[#71717A] dark:text-slate-400">انتخاب دقیق اماکن، محلات و امکانات</p>
                 </div>
               </div>
 
               <button
                 onClick={() => setIsFilterDrawerOpen(false)}
-                className="p-2 text-[#71717A] hover:text-[#1F2430] rounded-xl hover:bg-[#F7F3EC]"
+                className="p-2 text-[#71717A] dark:text-slate-400 hover:text-[#1F2430] dark:hover:text-slate-100 rounded-xl hover:bg-[#F7F3EC] dark:hover:bg-slate-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -838,7 +859,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-5 text-xs">
               {/* 1. Place Type Filter */}
               <div>
-                <label className="block font-black text-[#1F2430] mb-2">نوع مکان:</label>
+                <label className="block font-black text-[#1F2430] dark:text-slate-200 mb-2">نوع مکان:</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { id: 'all', label: 'همه اماکن' },
@@ -851,8 +872,8 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                       onClick={() => setDraftFilters((prev) => ({ ...prev, type: t.id as any }))}
                       className={`p-2.5 rounded-xl border text-center font-bold transition-all ${
                         draftFilters.type === t.id
-                          ? 'bg-[#0E7C86] text-white border-[#0E7C86] shadow-xs'
-                          : 'bg-[#F7F3EC] text-[#52525B] border-[#DDD5C5] hover:bg-[#E4DCB]'
+                          ? 'bg-[#0E7C86] dark:bg-teal-600 text-white border-[#0E7C86] shadow-xs'
+                          : 'bg-[#F7F3EC] dark:bg-slate-800 text-[#52525B] dark:text-slate-300 border-[#DDD5C5] dark:border-slate-700 hover:bg-[#E4DCB]'
                       }`}
                     >
                       {t.label}
@@ -862,10 +883,10 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
               </div>
 
               {/* 2. Open Now Toggle */}
-              <div className="p-3 bg-[#F7F3EC] rounded-2xl border border-[#DDD5C5] flex items-center justify-between">
+              <div className="p-3 bg-[#F7F3EC] dark:bg-slate-800 rounded-2xl border border-[#DDD5C5] dark:border-slate-700 flex items-center justify-between">
                 <div>
-                  <h4 className="font-bold text-[#1F2430]">فقط اماکن بازِ اکنون</h4>
-                  <p className="text-[11px] text-[#71717A]">اماکنی که در این لحظه درب آن‌ها برای نماز یا مراسم باز است</p>
+                  <h4 className="font-bold text-[#1F2430] dark:text-slate-200">فقط اماکن بازِ اکنون</h4>
+                  <p className="text-[11px] text-[#71717A] dark:text-slate-400">اماکنی که در این لحظه درب آن‌ها برای نماز یا مراسم باز است</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -874,17 +895,17 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                     onChange={(e) => setDraftFilters((prev) => ({ ...prev, openOnly: e.target.checked }))}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-[#DDD5C5] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  <div className="w-11 h-6 bg-[#DDD5C5] dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                 </label>
               </div>
 
               {/* 3. Neighborhood Selector */}
               <div>
-                <label className="block font-black text-[#1F2430] mb-2">محله دزفول:</label>
+                <label className="block font-black text-[#1F2430] dark:text-slate-200 mb-2">محله دزفول:</label>
                 <select
                   value={draftFilters.neighborhoodId}
                   onChange={(e) => setDraftFilters((prev) => ({ ...prev, neighborhoodId: e.target.value }))}
-                  className="w-full bg-[#F7F3EC] border border-[#DDD5C5] rounded-xl px-3 py-2.5 text-xs text-[#1F2430] font-bold focus:border-[#0E7C86] focus:outline-none"
+                  className="w-full bg-[#F7F3EC] dark:bg-slate-800 border border-[#DDD5C5] dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs text-[#1F2430] dark:text-slate-200 font-bold focus:border-[#0E7C86] focus:outline-none"
                 >
                   <option value="all">تمام محله‌های دزفول</option>
                   {INITIAL_NEIGHBORHOODS.map((nh) => (
@@ -897,7 +918,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
 
               {/* 4. Facilities Checklist */}
               <div>
-                <label className="block font-black text-[#1F2430] mb-2">امکانات و ویژگی‌ها:</label>
+                <label className="block font-black text-[#1F2430] dark:text-slate-200 mb-2">امکانات و ویژگی‌ها:</label>
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
                     { key: 'shovadoon', label: 'شوادون سنتی دزفولی', icon: Warehouse, color: 'text-[#B4552D]' },
@@ -925,16 +946,16 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
                         }}
                         className={`p-2.5 rounded-xl border flex items-center justify-between text-right transition-all ${
                           isChecked
-                            ? 'bg-[#0E7C86]/10 border-[#0E7C86] text-[#0E7C86] font-black'
-                            : 'bg-[#F7F3EC] border-[#DDD5C5] text-[#52525B] hover:bg-[#E4DCB]'
+                            ? 'bg-[#0E7C86]/10 dark:bg-teal-500/20 border-[#0E7C86] dark:border-teal-500 text-[#0E7C86] dark:text-teal-400 font-black'
+                            : 'bg-[#F7F3EC] dark:bg-slate-800 border-[#DDD5C5] dark:border-slate-700 text-[#52525B] dark:text-slate-300 hover:bg-[#E4DCB]'
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <Icon className={`w-4 h-4 ${isChecked ? 'text-[#0E7C86]' : item.color}`} />
+                          <Icon className={`w-4 h-4 ${isChecked ? 'text-[#0E7C86] dark:text-teal-400' : item.color}`} />
                           <span className="text-[11px]">{item.label}</span>
                         </div>
                         <div className={`w-4 h-4 rounded-md border flex items-center justify-center ${
-                          isChecked ? 'bg-[#0E7C86] border-[#0E7C86] text-white' : 'border-[#DDD5C5] bg-white'
+                          isChecked ? 'bg-[#0E7C86] dark:bg-teal-600 border-[#0E7C86] text-white' : 'border-[#DDD5C5] dark:border-slate-600 bg-white dark:bg-slate-700'
                         }`}>
                           {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
@@ -946,11 +967,11 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
             </div>
 
             {/* Modal Footer Buttons */}
-            <div className="p-4 bg-[#F7F3EC] border-t border-[#E0D8C8] flex items-center gap-2">
+            <div className="p-4 bg-[#F7F3EC] dark:bg-slate-800 border-t border-[#E0D8C8] dark:border-slate-700 flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleApplyFilters}
-                className="flex-1 bg-[#0E7C86] hover:bg-[#0a5d65] text-white py-2.5 px-4 rounded-xl font-bold shadow-md transition-all text-center"
+                className="flex-1 bg-[#0E7C86] hover:bg-[#0a5d65] dark:bg-teal-600 dark:hover:bg-teal-700 text-white py-2.5 px-4 rounded-xl font-bold shadow-md transition-all text-center"
               >
                 اعمال فیلترها
               </button>
@@ -958,7 +979,7 @@ export const FullMapView: React.FC<FullMapViewProps> = ({
               <button
                 type="button"
                 onClick={handleClearFilters}
-                className="flex items-center gap-1 bg-white hover:bg-stone-100 text-[#71717A] border border-[#DDD5C5] py-2.5 px-3 rounded-xl font-bold transition-all"
+                className="flex items-center gap-1 bg-white dark:bg-slate-700 hover:bg-stone-100 dark:hover:bg-slate-600 text-[#71717A] dark:text-slate-200 border border-[#DDD5C5] dark:border-slate-600 py-2.5 px-3 rounded-xl font-bold transition-all"
                 title="پاک کردن همه فیلترها"
               >
                 <RotateCcw className="w-3.5 h-3.5" />

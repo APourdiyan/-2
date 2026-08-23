@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Search, Bell, Clock, Compass, Sparkles, X, Check } from 'lucide-react';
+import { Search, Bell, Clock, Compass, Sparkles, X, Check, Sun, Moon } from 'lucide-react';
 import { toPersianDigits, DEZFUL_PRAYER_TIMES, getCurrentJalaliDateString } from '../utils/persianUtils';
+import { useAppStore } from '../store/appStore';
 
 interface HeaderProps {
   searchQuery: string;
@@ -20,11 +21,12 @@ export const Header: React.FC<HeaderProps> = ({
   unreadRemindersCount
 }) => {
   const jalaliDate = getCurrentJalaliDateString();
+  const { isDarkMode, toggleDarkMode } = useAppStore();
 
   return (
-    <header className="sticky top-0 z-40 bg-[#F7F3EC]/90 backdrop-blur-md border-b border-[#E6DFC9] transition-all">
+    <header className="sticky top-0 z-40 bg-[#F7F3EC]/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-[#E6DFC9] dark:border-slate-800 transition-all">
       {/* Top Banner / Prayer Ticker */}
-      <div className="bg-[#0E7C86] text-white text-xs px-3 py-1.5 flex items-center justify-between shadow-xs">
+      <div className="bg-[#0E7C86] dark:bg-teal-900 text-white text-xs px-3 py-1.5 flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2">
           <span className="inline-block w-2 h-2 rounded-full bg-[#E5B555] animate-pulse"></span>
           <span className="font-medium">شهر دارالمؤمنین دزفول</span>
@@ -55,10 +57,10 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <h1 className="font-bold text-base sm:text-lg text-[#1F2430] tracking-tight">نقشه مذهبی دزفول</h1>
-              <span className="bg-[#B4552D]/10 text-[#B4552D] border border-[#B4552D]/20 text-[10px] px-1.5 py-0.5 rounded-md font-semibold">دایرکتوری زنده</span>
+              <h1 className="font-bold text-base sm:text-lg text-[#1F2430] dark:text-slate-100 tracking-tight">نقشه مذهبی دزفول</h1>
+              <span className="bg-[#B4552D]/10 dark:bg-amber-500/20 text-[#B4552D] dark:text-amber-400 border border-[#B4552D]/20 dark:border-amber-500/30 text-[10px] px-1.5 py-0.5 rounded-md font-semibold">دایرکتوری زنده</span>
             </div>
-            <p className="text-[11px] text-[#71717A] hidden xs:block">مساجد، حسینیه‌ها و مراسمات کهن‌شهر دزفول</p>
+            <p className="text-[11px] text-[#71717A] dark:text-slate-400 hidden xs:block">مساجد، حسینیه‌ها و مراسمات کهن‌شهر دزفول</p>
           </div>
         </div>
 
@@ -71,33 +73,48 @@ export const Header: React.FC<HeaderProps> = ({
               onChange={(e) => onSearchChange(e.target.value)}
               onClick={onOpenSearchModal}
               placeholder="جستجوی مسجد، حسینیه، محله، سخنران..."
-              className="w-full bg-white border border-[#DDD5C5] focus:border-[#0E7C86] focus:ring-2 focus:ring-[#0E7C86]/20 rounded-xl pr-9 pl-8 py-2 text-xs sm:text-sm text-[#1F2430] placeholder-[#8C8474] transition-all shadow-xs"
+              className="w-full bg-white dark:bg-slate-800 border border-[#DDD5C5] dark:border-slate-700 focus:border-[#0E7C86] dark:focus:border-teal-500 focus:ring-2 focus:ring-[#0E7C86]/20 rounded-xl pr-9 pl-8 py-2 text-xs sm:text-sm text-[#1F2430] dark:text-slate-100 placeholder-[#8C8474] dark:placeholder-slate-400 transition-all shadow-xs"
             />
-            <Search className="w-4 h-4 text-[#8C8474] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-[#8C8474] dark:text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             {searchQuery ? (
               <button
                 onClick={() => onSearchChange('')}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8C8474] hover:text-[#1F2430] p-1"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#8C8474] hover:text-[#1F2430] dark:hover:text-slate-200 p-1"
                 aria-label="پاک کردن"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             ) : (
-              <span className="hidden sm:block absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] bg-[#F7F3EC] text-[#8C8474] px-1.5 py-0.5 rounded border border-[#E0D8C8]">
+              <span className="hidden sm:block absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] bg-[#F7F3EC] dark:bg-slate-700 text-[#8C8474] dark:text-slate-300 px-1.5 py-0.5 rounded border border-[#E0D8C8] dark:border-slate-600">
                 فوری
               </span>
             )}
           </div>
         </div>
 
-        {/* Action Buttons: Notifications & Profile/Help */}
+        {/* Action Buttons: Dark Mode Toggle & Notifications */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* Dark Mode Toggle Button */}
+          <button
+            onClick={toggleDarkMode}
+            className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-[#F2ECE1] dark:hover:bg-slate-700 border border-[#DDD5C5] dark:border-slate-700 text-[#1F2430] dark:text-slate-200 transition-colors shadow-xs"
+            title={isDarkMode ? 'تغییر به تم روشن' : 'تغییر به تم تاریک (Dark Mode)'}
+            aria-label="تغییر تم"
+          >
+            {isDarkMode ? (
+              <Sun className="w-4 h-4 text-amber-400 hover:rotate-45 transition-transform" />
+            ) : (
+              <Moon className="w-4 h-4 text-[#52525B] hover:text-[#0E7C86] transition-colors" />
+            )}
+          </button>
+
+          {/* Notifications Button */}
           <button
             onClick={onOpenNotifications}
-            className="relative p-2 sm:p-2.5 rounded-xl bg-white hover:bg-[#F2ECE1] border border-[#DDD5C5] text-[#1F2430] transition-colors shadow-xs"
+            className="relative p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-[#F2ECE1] dark:hover:bg-slate-700 border border-[#DDD5C5] dark:border-slate-700 text-[#1F2430] dark:text-slate-200 transition-colors shadow-xs"
             title="یادآوری‌ها و رویدادها"
           >
-            <Bell className="w-4 h-4 text-[#52525B]" />
+            <Bell className="w-4 h-4 text-[#52525B] dark:text-slate-300" />
             {unreadRemindersCount > 0 && (
               <span className="absolute -top-1 -right-1 bg-[#B4552D] text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
                 {toPersianDigits(unreadRemindersCount)}
@@ -109,3 +126,4 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+

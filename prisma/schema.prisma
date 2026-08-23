@@ -1,0 +1,93 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Neighborhood {
+  id                   String   @id @default(cuid())
+  name                 String
+  slug                 String   @unique
+  description          String?
+  mosquesCount         Int      @default(0)
+  hussainiyasCount     Int      @default(0)
+  historicalCount      Int      @default(0)
+  isHistoricalDistrict Boolean  @default(false)
+  latitude             Float
+  longitude            Float
+  keyHighlights        String?  // JSON string or comma-separated highlights
+  places               Place[]
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model Place {
+  id                   String       @id @default(cuid())
+  name                 String
+  type                 String       // mosque | hussainiya | shrine
+  isHistorical         Boolean      @default(false)
+  historicalPeriod     String?
+  neighborhoodId       String
+  neighborhood         Neighborhood @relation(fields: [neighborhoodId], references: [id])
+  address              String
+  latitude             Float
+  longitude            Float
+  phone                String?
+  isCurrentlyOpen      Boolean      @default(true)
+  openingHours         String?
+  capacity             Int          @default(0)
+  imamOrCustodian      String?
+  image                String?
+  description          String?
+  historySummary       String?
+  establishedYear      String?
+  shovadoon            Boolean      @default(false)
+  shovadoonDepthMeters Float?
+  ladiesSection        Boolean      @default(true)
+  wheelchairAccess     Boolean      @default(false)
+  quranClasses         Boolean      @default(false)
+  parking              Boolean      @default(false)
+  liveBroadcast        Boolean      @default(false)
+  wuduFacilities       Boolean      @default(true)
+  library              Boolean      @default(false)
+  coolingSystem        String?
+  rating               Float        @default(4.8)
+  events               Event[]
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+}
+
+model Event {
+  id               String   @id @default(cuid())
+  placeId          String
+  place            Place    @relation(fields: [placeId], references: [id])
+  title            String
+  speaker          String?
+  eulogist         String?
+  qari             String?
+  date             String   // Jalali date string e.g. 1403/06/02
+  dayOfWeek        String?
+  timeStr          String?
+  timeBadge        String?
+  category         String   // mourning | celebration | speech | quran | prayer | komeyl_nodbeh
+  nazri            Boolean  @default(false)
+  nazriDescription String?
+  liveStream       Boolean  @default(false)
+  womenSection     Boolean  @default(true)
+  parking          Boolean  @default(false)
+  shovadoonActive  Boolean  @default(false)
+  quranRecitation  Boolean  @default(false)
+  latitude         Float
+  longitude        Float
+  isToday          Boolean  @default(false)
+  isTonight        Boolean  @default(false)
+  description      String?
+  contactPhone     String?
+  streamUrl        String?
+  attendeesCount   Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}

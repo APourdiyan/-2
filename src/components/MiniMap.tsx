@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
-import { Maximize2, Navigation, Layers, Compass, MapPin, Sparkles, AlertCircle } from 'lucide-react';
+import 'leaflet.markercluster';
+import { Maximize2, Navigation, Layers, Compass, MapPin, Sparkles } from 'lucide-react';
 import { Place } from '../types';
 import { toPersianDigits, calculateDistanceMeters, formatDistance } from '../utils/persianUtils';
 
@@ -23,9 +24,9 @@ export const MiniMap: React.FC<MiniMapProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersGroupRef = useRef<L.LayerGroup | null>(null);
+  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const userMarkerRef = useRef<L.Marker | null>(null);
   const [activeLegend, setActiveLegend] = useState<'all' | 'mosque' | 'hussainiya' | 'historical'>('all');
-  const [geoError, setGeoError] = useState<string | null>(null);
 
   // Dezful Center Coordinates
   const DEZFUL_CENTER: [number, number] = [32.3838, 48.4020];
@@ -42,7 +43,7 @@ export const MiniMap: React.FC<MiniMapProps> = ({
         attributionControl: false
       });
 
-      // Add Tile Layer (OpenStreetMap with clean warm styling)
+      // Add Tile Layer
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
         attribution: '&copy; OpenStreetMap'
@@ -51,7 +52,30 @@ export const MiniMap: React.FC<MiniMapProps> = ({
       // Add compact zoom control
       L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-      markersGroupRef.current = L.layerGroup().addTo(map);
+      // Create MarkerClusterGroup with Persian styled cluster icon
+      // @ts-expect-error markerClusterGroup is added by leaflet.markercluster plugin
+      const clusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 40,
+        spiderfyOnMaxZoom: true,
+        iconCreateFunction: (cluster: any) => {
+          const childCount = cluster.getChildCount();
+          const persianCount = toPersianDigits(childCount);
+          let sizeClass = 'cluster-small';
+          if (childCount >= 10) sizeClass = 'cluster-large';
+          else if (childCount >= 5) sizeClass = 'cluster-medium';
+
+          return L.divIcon({
+            html: `<div class="dezful-cluster-marker ${sizeClass}"><span>${persianCount}</span></div>`,
+            className: 'custom-cluster-icon',
+            iconSize: L.point(44, 44),
+            iconAnchor: [22, 22]
+          });
+        }
+      });
+
+      map.addLayer(clusterGroup);
+      clusterGroupRef.current = clusterGroup;
       mapInstanceRef.current = map;
     }
 
@@ -66,11 +90,10 @@ export const MiniMap: React.FC<MiniMapProps> = ({
 
   // Update Markers when places or legend filter change
   useEffect(() => {
-    const map = mapInstanceRef.current;
-    const markersGroup = markersGroupRef.current;
-    if (!map || !markersGroup) return;
+    const clusterGroup = clusterGroupRef.current;
+    if (!clusterGroup) return;
 
-    markersGroup.clearLayers();
+    clusterGroup.clearLayers();
 
     const filteredPlaces = places.filter((p) => {
       if (activeLegend === 'mosque') return p.type === 'mosque';
@@ -78,6 +101,8 @@ export const MiniMap: React.FC<MiniMapProps> = ({
       if (activeLegend === 'historical') return p.isHistorical;
       return true;
     });
+
+    const markers: L.Marker[] = [];
 
     filteredPlaces.forEach((place) => {
       // Choose colors & icons
@@ -137,11 +162,16 @@ export const MiniMap: React.FC<MiniMapProps> = ({
         }
       });
 
-      markersGroup.addLayer(marker);
+      markers.push(marker);
     });
 
+    clusterGroup.addLayers(markers);
+
     // Add User Location Pin if available
-    if (userCoords) {
+    if (userCoords && mapInstanceRef.current) {
+      if (userMarkerRef.current) {
+        userMarkerRef.current.remove();
+      }
       const userIcon = L.divIcon({
         className: 'user-pin',
         html: `
@@ -153,9 +183,8 @@ export const MiniMap: React.FC<MiniMapProps> = ({
         iconSize: [24, 24],
         iconAnchor: [12, 12]
       });
-      const userMarker = L.marker(userCoords, { icon: userIcon });
-      userMarker.bindPopup('<div style="font-family: \'Vazirmatn\'; text-align: center; padding: 6px; font-size: 12px; font-weight: 700;">موقعیت کنونی شما</div>');
-      markersGroup.addLayer(userMarker);
+      userMarkerRef.current = L.marker(userCoords, { icon: userIcon }).addTo(mapInstanceRef.current);
+      userMarkerRef.current.bindPopup('<div style="font-family: \'Vazirmatn\'; text-align: center; padding: 6px; font-size: 12px; font-weight: 700;">موقعیت کنونی شما</div>');
     }
   }, [places, activeLegend, userCoords]);
 
@@ -168,25 +197,27 @@ export const MiniMap: React.FC<MiniMapProps> = ({
 
   return (
     <section className="my-4 sm:my-5">
-      <div className="bg-white rounded-3xl p-3 sm:p-4 border border-[#E0D8C8] shadow-sm">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl p-3 sm:p-4 border border-[#E0D8C8] dark:border-slate-700 shadow-xs transition-colors">
         {/* Header bar of map */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-[#0E7C86]/10 text-[#0E7C86] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-[#0E7C86]/10 dark:bg-teal-500/10 text-[#0E7C86] dark:text-teal-400 flex items-center justify-center">
               <Compass className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm sm:text-base font-bold text-[#1F2430]">نقشه تعاملی مساجد دزفول</h2>
-              <p className="text-[11px] text-[#71717A]">پین‌های خوشه‌ای و مکان‌نماهای کهن‌شهر دزفول</p>
+              <h2 className="text-sm sm:text-base font-bold text-[#1F2430] dark:text-slate-100">نقشه تعاملی مساجد دزفول</h2>
+              <p className="text-[11px] text-[#71717A] dark:text-slate-400">خوشه‌بندی هوشمند پین‌ها و مکان‌نماهای دزفول</p>
             </div>
           </div>
 
           {/* Quick Map Legend Filters */}
-          <div className="flex items-center gap-1 bg-[#F7F3EC] p-1 rounded-xl border border-[#E4DCB] text-xs">
+          <div className="flex items-center gap-1 bg-[#F7F3EC] dark:bg-slate-900/80 p-1 rounded-xl border border-[#E4DCB] dark:border-slate-700 text-xs">
             <button
               onClick={() => setActiveLegend('all')}
               className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                activeLegend === 'all' ? 'bg-[#0E7C86] text-white shadow-xs' : 'text-[#71717A] hover:text-[#1F2430]'
+                activeLegend === 'all' 
+                  ? 'bg-[#0E7C86] dark:bg-teal-600 text-white shadow-xs' 
+                  : 'text-[#71717A] dark:text-slate-400 hover:text-[#1F2430] dark:hover:text-slate-200'
               }`}
             >
               همه ({toPersianDigits(places.length)})
@@ -194,16 +225,20 @@ export const MiniMap: React.FC<MiniMapProps> = ({
             <button
               onClick={() => setActiveLegend('mosque')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                activeLegend === 'mosque' ? 'bg-[#0E7C86] text-white shadow-xs' : 'text-[#71717A] hover:text-[#1F2430]'
+                activeLegend === 'mosque' 
+                  ? 'bg-[#0E7C86] dark:bg-teal-600 text-white shadow-xs' 
+                  : 'text-[#71717A] dark:text-slate-400 hover:text-[#1F2430] dark:hover:text-slate-200'
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-[#0E7C86]"></span>
+              <span className="w-2 h-2 rounded-full bg-[#0E7C86] dark:bg-teal-400"></span>
               مساجد
             </button>
             <button
               onClick={() => setActiveLegend('hussainiya')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                activeLegend === 'hussainiya' ? 'bg-[#B4552D] text-white shadow-xs' : 'text-[#71717A] hover:text-[#1F2430]'
+                activeLegend === 'hussainiya' 
+                  ? 'bg-[#B4552D] text-white shadow-xs' 
+                  : 'text-[#71717A] dark:text-slate-400 hover:text-[#1F2430] dark:hover:text-slate-200'
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-[#B4552D]"></span>
@@ -212,7 +247,9 @@ export const MiniMap: React.FC<MiniMapProps> = ({
             <button
               onClick={() => setActiveLegend('historical')}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                activeLegend === 'historical' ? 'bg-[#E5B555] text-[#1F2430] shadow-xs' : 'text-[#71717A] hover:text-[#1F2430]'
+                activeLegend === 'historical' 
+                  ? 'bg-[#E5B555] text-[#1F2430] shadow-xs' 
+                  : 'text-[#71717A] dark:text-slate-400 hover:text-[#1F2430] dark:hover:text-slate-200'
               }`}
             >
               <Sparkles className="w-3 h-3 text-amber-500" />
@@ -222,16 +259,16 @@ export const MiniMap: React.FC<MiniMapProps> = ({
         </div>
 
         {/* Map Container */}
-        <div className="relative rounded-2xl overflow-hidden border border-[#E0D8C8] h-64 sm:h-72 w-full z-10 shadow-inner">
+        <div className="relative rounded-2xl overflow-hidden border border-[#E0D8C8] dark:border-slate-700 h-64 sm:h-72 w-full z-10 shadow-inner">
           <div ref={mapContainerRef} className="w-full h-full" />
 
           {/* Floating Actions on Map */}
           <div className="absolute top-3 right-3 z-[400] flex flex-col gap-2">
             <button
               onClick={onOpenFullMap}
-              className="flex items-center gap-1.5 bg-white/95 hover:bg-white text-[#1F2430] text-xs font-bold px-3 py-2 rounded-xl shadow-md border border-[#E0D8C8] backdrop-blur-xs transition-all active:scale-95"
+              className="flex items-center gap-1.5 bg-white/95 dark:bg-slate-800/95 hover:bg-white dark:hover:bg-slate-800 text-[#1F2430] dark:text-slate-100 text-xs font-bold px-3 py-2 rounded-xl shadow-md border border-[#E0D8C8] dark:border-slate-700 backdrop-blur-xs transition-all active:scale-95"
             >
-              <Maximize2 className="w-3.5 h-3.5 text-[#0E7C86]" />
+              <Maximize2 className="w-3.5 h-3.5 text-[#0E7C86] dark:text-teal-400" />
               <span>نقشه تمام‌صفحه</span>
             </button>
           </div>
@@ -239,7 +276,7 @@ export const MiniMap: React.FC<MiniMapProps> = ({
           <div className="absolute bottom-3 right-3 z-[400]">
             <button
               onClick={onFindNearest}
-              className="flex items-center gap-2 bg-[#0E7C86] hover:bg-[#0b636b] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl shadow-lg shadow-[#0E7C86]/30 border border-white/30 backdrop-blur-xs transition-all active:scale-95 animate-pulse-slow"
+              className="flex items-center gap-2 bg-[#0E7C86] hover:bg-[#0b636b] dark:bg-teal-600 dark:hover:bg-teal-700 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl shadow-lg shadow-[#0E7C86]/30 border border-white/30 backdrop-blur-xs transition-all active:scale-95 animate-pulse-slow"
             >
               <Navigation className="w-4 h-4 text-[#E5B555]" />
               <span>نزدیک‌ترین مسجد به من</span>
@@ -247,7 +284,7 @@ export const MiniMap: React.FC<MiniMapProps> = ({
           </div>
 
           {/* Map Pin Guide on Bottom Left */}
-          <div className="hidden sm:flex absolute bottom-3 left-12 z-[400] bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#E0D8C8] text-[11px] text-[#52525B] items-center gap-3 shadow-xs">
+          <div className="hidden sm:flex absolute bottom-3 left-12 z-[400] bg-white/90 dark:bg-slate-800/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-[#E0D8C8] dark:border-slate-700 text-[11px] text-[#52525B] dark:text-slate-300 items-center gap-3 shadow-xs">
             <span className="flex items-center gap-1 font-medium">
               <span className="w-2.5 h-2.5 rounded-full bg-[#0E7C86] inline-block"></span> مسجد
             </span>
@@ -262,22 +299,22 @@ export const MiniMap: React.FC<MiniMapProps> = ({
 
         {/* Nearest Place Banner if found */}
         {nearestPlace && (
-          <div className="mt-3 p-3 bg-[#E6F4F5] border border-[#0E7C86]/30 rounded-2xl flex items-center justify-between gap-3 animate-fadeIn">
+          <div className="mt-3 p-3 bg-[#E6F4F5] dark:bg-teal-950/40 border border-[#0E7C86]/30 dark:border-teal-700/40 rounded-2xl flex items-center justify-between gap-3 animate-fadeIn">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-[#0E7C86] text-white flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-[#0E7C86] dark:bg-teal-600 text-white flex items-center justify-center shrink-0">
                 <MapPin className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#0E7C86]">نزدیک‌ترین مکان به شما:</span>
-                  <span className="text-xs font-black text-[#1F2430]">{nearestPlace.name}</span>
+                  <span className="text-xs font-bold text-[#0E7C86] dark:text-teal-400">نزدیک‌ترین مکان به شما:</span>
+                  <span className="text-xs font-black text-[#1F2430] dark:text-slate-100">{nearestPlace.name}</span>
                 </div>
-                <p className="text-[11px] text-[#52525B]">{nearestPlace.neighborhood} • {nearestPlace.address}</p>
+                <p className="text-[11px] text-[#52525B] dark:text-slate-400">{nearestPlace.neighborhood} • {nearestPlace.address}</p>
               </div>
             </div>
             <button
               onClick={() => onSelectPlace(nearestPlace)}
-              className="px-3 py-1.5 rounded-xl bg-[#0E7C86] text-white text-xs font-bold hover:bg-[#0a5d65] shrink-0"
+              className="px-3 py-1.5 rounded-xl bg-[#0E7C86] dark:bg-teal-600 text-white text-xs font-bold hover:bg-[#0a5d65] shrink-0"
             >
               مشاهده و مسیریابی
             </button>
@@ -287,3 +324,4 @@ export const MiniMap: React.FC<MiniMapProps> = ({
     </section>
   );
 };
+
