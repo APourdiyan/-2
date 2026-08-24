@@ -10,8 +10,12 @@ export interface DeviceInfo {
   height: number;
 }
 
-export function useDevice(debounceMs: number = 100): DeviceInfo {
-  const getDeviceInfo = (): DeviceInfo => {
+/**
+ * هوک جامع تشخیص دستگاه، سایز پنجره، مدیا کوئری و قابلیت تاچ
+ * به همراه ۲۰۰ میلی‌ثانیه debounce در رویدادهای resize و orientationchange
+ */
+export function useDevice(): DeviceInfo {
+  const getDeviceState = (): DeviceInfo => {
     if (typeof window === 'undefined') {
       return {
         isMobile: false,
@@ -19,33 +23,19 @@ export function useDevice(debounceMs: number = 100): DeviceInfo {
         isDesktop: true,
         isTouchDevice: false,
         width: 1280,
-        height: 800,
+        height: 800
       };
     }
 
     const width = window.innerWidth;
     const height = window.innerHeight;
-
-    // تشخیص دستگاه‌های لمسی
+    const isMobile = width < BREAKPOINTS.tablet;
+    const isTablet = width >= BREAKPOINTS.tablet && width < BREAKPOINTS.laptop;
+    const isDesktop = width >= BREAKPOINTS.laptop;
     const isTouchDevice =
       'ontouchstart' in window ||
       navigator.maxTouchPoints > 0 ||
-      Boolean((navigator as any).msMaxTouchPoints > 0);
-
-    // بررسی User-Agent برای دستگاه‌های موبایل و تبلت
-    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera || '';
-    const mobileUARegex = /Android|webOS|iPhone|iPod|BlackBerry|IEMobile|Opera Mini/i;
-    const tabletUARegex = /iPad|Android(?!.*Mobile)|Tablet/i;
-
-    const isMobileUA = mobileUARegex.test(userAgent);
-    const isTabletUA = tabletUARegex.test(userAgent);
-
-    // دسته‌بندی بر اساس نقاط شکست استاندارد و رفتار مرورگر
-    const isMobile = width < BREAKPOINTS.tablet || (isMobileUA && width < BREAKPOINTS.laptop);
-    const isTablet =
-      (width >= BREAKPOINTS.tablet && width < BREAKPOINTS.laptop) ||
-      (isTabletUA && width < BREAKPOINTS.desktop);
-    const isDesktop = width >= BREAKPOINTS.laptop && !isMobileUA;
+      window.matchMedia('(pointer: coarse)').matches;
 
     return {
       isMobile,
@@ -53,38 +43,35 @@ export function useDevice(debounceMs: number = 100): DeviceInfo {
       isDesktop,
       isTouchDevice,
       width,
-      height,
+      height
     };
   };
 
-  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>(getDeviceInfo);
+  const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>(getDeviceState);
 
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let timeoutId: number | undefined;
 
     const handleResize = () => {
       if (timeoutId) {
-        clearTimeout(timeoutId);
+        window.clearTimeout(timeoutId);
       }
-      timeoutId = setTimeout(() => {
-        setDeviceInfo(getDeviceInfo());
-      }, debounceMs);
+      timeoutId = window.setTimeout(() => {
+        setDeviceInfo(getDeviceState());
+      }, 200);
     };
 
-    window.addEventListener('resize', handleResize, { passive: true });
-    window.addEventListener('orientationchange', handleResize, { passive: true });
-
-    // ارزیابی اولیه در هنگام mount
-    setDeviceInfo(getDeviceInfo());
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
 
     return () => {
       if (timeoutId) {
-        clearTimeout(timeoutId);
+        window.clearTimeout(timeoutId);
       }
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
     };
-  }, [debounceMs]);
+  }, []);
 
   return deviceInfo;
 }

@@ -59,7 +59,7 @@ export const FeaturedCarousel: React.FC<FeaturedCarouselProps> = ({
               <div className="relative h-44 w-full overflow-hidden bg-[#ECE4D4]">
                 <img
                   src={place.image}
-                  alt={place.name}
+                  alt={`تصویر ${place.name}`}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   loading="lazy"

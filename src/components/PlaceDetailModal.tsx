@@ -74,7 +74,8 @@ export const PlaceDetailModal: React.FC<PlaceDetailModalProps> = ({
       <div className="relative h-52 sm:h-64 w-full bg-[#ECE4D4] dark:bg-slate-900 shrink-0">
         <img
           src={place.image}
-          alt={place.name}
+          alt={`تصویر ${place.name}`}
+          loading="lazy"
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover"
         />

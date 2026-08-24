@@ -2,9 +2,22 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+@theme {
+  --color-primary: #0E7C86;
+  --color-primary-hover: #0b666e;
+  --color-primary-dark: #084c53;
+  --color-light-bg: #F0EAE1;
+  --color-dark-bg: #0F172A;
+  --color-light-text: #1A1A1A;
+  --color-dark-text: #F1F5F9;
+  --color-accent: #C4B9A7;
+  --color-accent-hover: #b5a894;
+}
+
 @layer base {
   html {
     font-size: 16px;
+    direction: rtl;
   }
   @media (min-width: 768px) {
     html {
@@ -17,13 +30,27 @@
     }
   }
 
+  body {
+    background-color: #F0EAE1;
+    color: #1A1A1A;
+    font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height: 100vh;
+  }
+
+  .dark body,
+  body.dark,
+  html.dark body {
+    background-color: #0F172A;
+    color: #F1F5F9;
+  }
+
   * {
     font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
 
   /* Accessibility: Tab Navigation & Focus Visible for Keyboard Users */
   :focus-visible {
-    outline: 2px solid #C26D47 !important;
+    outline: 2px solid #0E7C86 !important;
     outline-offset: 2px !important;
   }
 }

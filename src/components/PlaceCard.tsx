@@ -27,7 +27,8 @@ export const PlaceCard: React.FC<PlaceCardProps> = ({
         <div className="relative h-36 rounded-2xl overflow-hidden mb-3 border border-[#E0D8C8]">
           <img
             src={place.image}
-            alt={place.name}
+            alt={`تصویر ${place.name}`}
+            loading="lazy"
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />

@@ -12,33 +12,26 @@ import {
   Building2, 
   Warehouse, 
   Users, 
-  Check, 
-  X, 
   Calendar, 
   ChevronDown, 
   BookOpen, 
   Accessibility, 
   Droplets, 
   Car, 
-  Layers, 
-  HeartHandshake, 
-  Bell, 
-  BellRing, 
-  AlertCircle,
-  ExternalLink
+  Radio
 } from 'lucide-react';
 import { INITIAL_PLACES, INITIAL_EVENTS } from '../data/dezfulData';
 import { Place, EventItem } from '../types';
 import { 
   toPersianDigits, 
   getRoutingLinks, 
-  DEZFUL_PRAYER_TIMES, 
   calculateDistanceMeters, 
   formatDistance 
 } from '../utils/persianUtils';
 import { useAppStore } from '../store/appStore';
 import { Navigation } from '../components/Navigation';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { useToast } from '../components/common/Toast';
 
 /**
  * صفحه جزئیات کامل مسجد، حسینیه یا بقعه متبرکه در دزفول
@@ -47,9 +40,10 @@ export const PlaceDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { userLocation, toggleDarkMode } = useAppStore();
+  const { showToast } = useToast();
 
   useKeyboardShortcuts({
-    onOpenSearch: () => navigate('/?search=true'),
+    onOpenSearch: () => navigate('/search'),
     onCloseModals: () => navigate(-1),
     onNavigateToMap: () => navigate('/?tab=map'),
     onNavigateToEvents: () => navigate('/calendar'),
@@ -58,512 +52,461 @@ export const PlaceDetailPage: React.FC = () => {
   });
 
   const [place, setPlace] = useState<Place | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [allEvents] = useState<EventItem[]>(() => {
+    const saved = localStorage.getItem('dezful_events');
+    return saved ? JSON.parse(saved) : INITIAL_EVENTS;
+  });
 
   const [isSaved, setIsSaved] = useState<boolean>(false);
-  const [isRoutingOpen, setIsRoutingOpen] = useState<boolean>(false);
-  const [savedReminderIds, setSavedReminderIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('dezful_reminders');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [activeAccordion, setActiveAccordion] = useState<string | null>('address');
 
-  // بارگذاری داده‌های مکان با هندلینگ کامل Loading و Error
   useEffect(() => {
-    setLoading(true);
-    setError(null);
+    const savedPlaces: Place[] = (() => {
+      const saved = localStorage.getItem('dezful_places');
+      return saved ? JSON.parse(saved) : INITIAL_PLACES;
+    })();
+
+    const found = savedPlaces.find((p) => p.id === id);
+    if (found) {
+      setPlace(found);
+      const placeEvs = allEvents.filter((e) => e.placeId === found.id);
+      setEvents(placeEvs);
+    }
 
     try {
-      const storedPlaces: Place[] = JSON.parse(
-        localStorage.getItem('dezful_places') || '[]'
-      );
-      const allPlaces = storedPlaces.length > 0 ? storedPlaces : INITIAL_PLACES;
-      const found = allPlaces.find((p) => p.id === id);
-
-      if (found) {
-        setPlace(found);
-      } else {
-        setError('مکان مورد نظر در پایگاه داده مذهبی دزفول یافت نشد.');
+      const saved = localStorage.getItem('dezful_saved_places');
+      const list: string[] = saved ? JSON.parse(saved) : [];
+      if (id && list.includes(id)) {
+        setIsSaved(true);
       }
-    } catch (err) {
-      setError('خطا در خواندن اطلاعات مکان.');
-    } finally {
-      setLoading(false);
+    } catch {
+      // silent
     }
-  }, [id]);
+  }, [id, allEvents]);
 
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3000);
-  };
+  if (!place) {
+    return (
+      <div className="min-h-screen bg-[#FAF7F2] dark:bg-slate-950 flex items-center justify-center font-['Vazirmatn'] p-4" dir="rtl">
+        <div className="bg-white dark:bg-slate-900 border border-stone-200 dark:border-slate-800 rounded-3xl p-6 text-center space-y-4 max-w-sm">
+          <p className="text-sm font-bold text-stone-700 dark:text-stone-300">مکان مورد نظر یافت نشد.</p>
+          <button
+            onClick={() => navigate('/')}
+            className="px-4 py-2 rounded-2xl bg-[#0E7C86] text-white text-xs font-bold"
+          >
+            بازگشت به صفحه اصلی
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const handleToggleReminder = (eventId: string, title: string) => {
-    let updated: string[];
-    if (savedReminderIds.includes(eventId)) {
-      updated = savedReminderIds.filter((eId) => eId !== eventId);
-      showToast(`یادآوری لغو شد.`);
-    } else {
-      updated = [...savedReminderIds, eventId];
-      showToast(`یادآوری رویداد تنظیم شد.`);
+  const toggleBookmark = () => {
+    try {
+      const saved = localStorage.getItem('dezful_saved_places');
+      let list: string[] = saved ? JSON.parse(saved) : [];
+      if (list.includes(place.id)) {
+        list = list.filter((pid) => pid !== place.id);
+        setIsSaved(false);
+        showToast('از نشان‌شده‌ها حذف شد', 'info');
+      } else {
+        list.push(place.id);
+        setIsSaved(true);
+        showToast('به مکان‌های ذخیره‌شده اضافه شد', 'success');
+      }
+      localStorage.setItem('dezful_saved_places', JSON.stringify(list));
+    } catch {
+      // silent
     }
-    setSavedReminderIds(updated);
-    localStorage.setItem('dezful_reminders', JSON.stringify(updated));
   };
 
   const handleShare = async () => {
-    if (!place) return;
     if (navigator.share) {
       try {
         await navigator.share({
           title: place.name,
-          text: `${place.name} در محله ${place.neighborhood} دزفول`,
-          url: window.location.href,
+          text: `${place.name} - واقع در محله ${place.neighborhood} دزفول`,
+          url: window.location.href
         });
-      } catch (err) {
-        // نادیده گرفتن لغو اشتراک‌گذاری
+      } catch {
+        // user cancel
       }
     } else {
       navigator.clipboard.writeText(window.location.href);
-      showToast('پیوند صفحه کپی شد.');
+      showToast('لینک صفحه در کلیپ‌بورد کپی شد', 'success');
     }
   };
 
-  // حالت بارگذاری
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F7F3EC] dark:bg-slate-900 flex flex-col items-center justify-center p-4">
-        <div className="w-12 h-12 border-4 border-[#0E7C86] dark:border-teal-500 border-t-transparent rounded-full animate-spin"></div>
-        <p className="mt-4 text-xs font-bold text-[#71717A] dark:text-slate-400">در حال بارگذاری مشخصات مکان...</p>
-      </div>
-    );
-  }
-
-  // حالت خطا
-  if (error || !place) {
-    return (
-      <div className="min-h-screen bg-[#F7F3EC] dark:bg-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full border border-[#E0D8C8] dark:border-slate-700 text-center space-y-4 shadow-xl">
-          <div className="w-14 h-14 rounded-2xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto">
-            <AlertCircle className="w-8 h-8" />
-          </div>
-          <h2 className="text-base font-black text-[#1F2430] dark:text-slate-100">{error || 'مکان پیدا نشد'}</h2>
-          <p className="text-xs text-[#71717A] dark:text-slate-400">ممکن است شناسه مکان تغییر کرده یا حذف شده باشد.</p>
-          <button
-            onClick={() => navigate('/')}
-            className="w-full bg-[#0E7C86] dark:bg-teal-600 text-white py-2.5 rounded-xl font-bold text-xs"
-          >
-            بازگشت به نقشه و خانه
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const routing = getRoutingLinks(place.coordinates[0], place.coordinates[1], place.name);
-  const distanceMeters = userLocation
-    ? calculateDistanceMeters(userLocation.lat, userLocation.lng, place.coordinates[0], place.coordinates[1])
-    : null;
 
-  // رویدادهای مربوط به این مکان
-  const storedEvents: EventItem[] = JSON.parse(
-    localStorage.getItem('dezful_events') || '[]'
-  );
-  const allEvents = storedEvents.length > 0 ? storedEvents : INITIAL_EVENTS;
-  const placeEvents = allEvents.filter((e) => e.placeId === place.id);
+  let distStr = '';
+  if (userLocation) {
+    const d = calculateDistanceMeters(
+      userLocation.lat,
+      userLocation.lng,
+      place.coordinates[0],
+      place.coordinates[1]
+    );
+    distStr = formatDistance(d);
+  }
 
-  // اماکن همسایه و نزدیک
-  const nearbyPlaces = INITIAL_PLACES.filter(
-    (p) => p.id !== place.id && (p.neighborhoodId === place.neighborhoodId || p.neighborhood === place.neighborhood)
-  ).slice(0, 4);
+  const featuresList = [
+    {
+      id: 'shovadoon',
+      label: 'شوادون تاریخی',
+      active: place.features.shovadoon,
+      icon: Warehouse,
+      color: 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800'
+    },
+    {
+      id: 'parking',
+      label: 'پارکینگ خودرو',
+      active: place.features.parking,
+      icon: Car,
+      color: 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-800'
+    },
+    {
+      id: 'ladiesSection',
+      label: 'بخش مجزای بانوان',
+      active: place.features.ladiesSection,
+      icon: Users,
+      color: 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/50 border-purple-200 dark:border-purple-800'
+    },
+    {
+      id: 'wheelchairAccess',
+      label: 'مناسب ویلچر / معلولین',
+      active: place.features.wheelchairAccess,
+      icon: Accessibility,
+      color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800'
+    },
+    {
+      id: 'wuduFacilities',
+      label: 'وضوخانه و سرویس',
+      active: place.features.wuduFacilities,
+      icon: Droplets,
+      color: 'text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/50 border-teal-200 dark:border-teal-800'
+    },
+    {
+      id: 'liveBroadcast',
+      label: 'پخش زنده مراسمات',
+      active: place.features.liveBroadcast,
+      icon: Radio,
+      color: 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800'
+    }
+  ];
 
   return (
-    <div className="min-h-screen bg-[#F7F3EC] dark:bg-slate-900 text-[#1F2430] dark:text-slate-100 font-['Vazirmatn',sans-serif] flex flex-col md:flex-row">
-      <Navigation
-        activeTab="home"
-        onTabChange={(tab) => {
-          if (tab === 'home') navigate('/');
-          else if (tab === 'map') navigate('/?tab=map');
-          else if (tab === 'calendar') navigate('/calendar');
-          else if (tab === 'neighborhoods') navigate('/?tab=neighborhoods');
-          else if (tab === 'submit') navigate('/?submit=true');
-        }}
-        todayEventsCount={allEvents.filter((e) => e.isToday || e.isTonight).length}
-        onOpenSearch={() => navigate('/?search=true')}
-      />
+    <div className="min-h-screen bg-[#FAF7F2] dark:bg-slate-950 text-stone-900 dark:text-stone-100 flex flex-col font-['Vazirmatn'] select-none" dir="rtl">
+      <main className="flex-1 max-w-4xl w-full mx-auto p-4 md:p-6 space-y-6 pb-24 md:pb-12">
+        {/* ۱. بخش بالا: تصویر + نام + نوع + وضعیت */}
+        <div className="relative rounded-3xl overflow-hidden bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 shadow-md">
+          <div className="relative h-64 md:h-80 w-full bg-stone-200 dark:bg-slate-800">
+            <img
+              src={place.image}
+              alt={`تصویر ${place.name}`}
+              loading="lazy"
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
 
-      <div className="flex-1 min-w-0 pb-24 md:pb-8 flex flex-col">
-        {/* پیام Toast */}
-        {toastMsg && (
-          <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-[#1F2430] dark:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-2xl shadow-xl border border-white/20 dark:border-slate-700 animate-slideDown flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-[#E5B555] animate-pulse"></span>
-            <span>{toastMsg}</span>
-          </div>
-        )}
+            <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
+              <button
+                onClick={() => navigate(-1)}
+                className="p-2.5 rounded-2xl bg-black/40 hover:bg-black/60 backdrop-blur-md text-white border border-white/20 transition-all active:scale-95"
+                title="بازگشت"
+              >
+                <ArrowRight className="w-5 h-5" />
+              </button>
 
-      {/* ۱. هدر تصویری بزرگ */}
-      <div className="relative h-64 sm:h-80 w-full overflow-hidden bg-stone-900">
-        <img
-          src={place.image}
-          alt={place.name}
-          referrerPolicy="no-referrer"
-          className="w-full h-full object-cover opacity-85"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#1F2430] dark:from-slate-950 via-black/40 to-transparent" />
-
-        {/* دکمه بازگشت بالا */}
-        <div className="absolute top-4 right-4 left-4 flex items-center justify-between z-10">
-          <button
-            onClick={() => navigate(-1)}
-            className="w-10 h-10 rounded-2xl bg-black/40 hover:bg-black/60 backdrop-blur-md text-white flex items-center justify-center transition-all"
-            title="بازگشت"
-          >
-            <ArrowRight className="w-5 h-5" />
-          </button>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleShare}
-              className="w-10 h-10 rounded-2xl bg-black/40 hover:bg-black/60 backdrop-blur-md text-white flex items-center justify-center transition-all"
-              title="اشتراک‌گذاری"
-            >
-              <Share2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => {
-                setIsSaved(!isSaved);
-                showToast(!isSaved ? 'مکان به نشان‌شده‌ها افزوده شد.' : 'از نشان‌شده‌ها حذف شد.');
-              }}
-              className="w-10 h-10 rounded-2xl bg-black/40 hover:bg-black/60 backdrop-blur-md text-white flex items-center justify-center transition-all"
-              title="نشان کردن"
-            >
-              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-[#E5B555] text-[#E5B555]' : ''}`} />
-            </button>
-          </div>
-        </div>
-
-        {/* عنوان و مشخصات روی تصویر */}
-        <div className="absolute bottom-4 right-4 left-4 text-white space-y-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg text-white ${
-              place.type === 'hussainiya' ? 'bg-[#B4552D]' : 'bg-[#0E7C86]'
-            }`}>
-              {place.type === 'mosque' ? 'مسجد' : place.type === 'shrine' ? 'آستانه متبرکه' : 'حسینیه'}
-            </span>
-            {place.isHistorical && (
-              <span className="bg-[#E5B555] text-[#1F2430] text-[10px] font-black px-2 py-0.5 rounded-lg">
-                ★ اثر تاریخی شاخص
-              </span>
-            )}
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${
-              place.isCurrentlyOpen ? 'bg-emerald-600 text-white' : 'bg-stone-700 text-white'
-            }`}>
-              {place.isCurrentlyOpen ? 'درب باز است' : 'هم‌اکنون بسته'}
-            </span>
-          </div>
-
-          <h1 className="text-xl sm:text-2xl font-black text-white drop-shadow-md">{place.name}</h1>
-          <div className="flex items-center gap-2 text-xs text-white/90">
-            <MapPin className="w-3.5 h-3.5 text-[#E5B555]" />
-            <span>محله {place.neighborhood}</span>
-            {distanceMeters !== null && (
-              <span>• فاصله از شما: {formatDistance(distanceMeters)}</span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto px-3 sm:px-4 mt-4 space-y-4">
-        {/* ۲. نوار اقدام چسبان (Sticky Action Bar) */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-3 sm:p-4 border border-[#E0D8C8] dark:border-slate-700 shadow-xs flex items-center gap-2 sticky top-3 z-30">
-          <div className="flex-1 relative">
-            <button
-              onClick={() => setIsRoutingOpen(!isRoutingOpen)}
-              className="w-full flex items-center justify-center gap-1.5 bg-[#0E7C86] hover:bg-[#0a5d65] dark:bg-teal-600 dark:hover:bg-teal-700 text-white py-2.5 px-3 rounded-2xl text-xs font-bold shadow-md transition-all"
-            >
-              <NavigationIcon className="w-4 h-4 text-[#E5B555]" />
-              <span>مسیریابی هوشمند</span>
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-
-            {isRoutingOpen && (
-              <div className="absolute top-full mt-1.5 right-0 left-0 bg-white dark:bg-slate-800 rounded-2xl p-2 border border-[#DDD5C5] dark:border-slate-700 shadow-2xl z-40 grid grid-cols-3 gap-1 text-center text-xs font-bold animate-slideDown">
-                <a href={routing.neshan} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-[#185ADB] dark:text-blue-400">نشان</a>
-                <a href={routing.balad} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-[#00A859] dark:text-emerald-400">بلد</a>
-                <a href={routing.googleMaps} target="_blank" rel="noopener noreferrer" className="p-2 rounded-xl hover:bg-[#F7F3EC] dark:hover:bg-slate-700 text-[#EA4335] dark:text-rose-400">گوگل</a>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleBookmark}
+                  aria-label="نشان کردن"
+                  className="p-2.5 rounded-2xl bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/20 text-white transition-all active:scale-95"
+                >
+                  <Bookmark className={`w-5 h-5 ${isSaved ? 'fill-amber-400 text-amber-400' : ''}`} />
+                </button>
+                <button
+                  onClick={handleShare}
+                  aria-label="اشتراک‌گذاری"
+                  className="p-2.5 rounded-2xl bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/20 text-white transition-all active:scale-95"
+                >
+                  <Share2 className="w-5 h-5" />
+                </button>
               </div>
+            </div>
+
+            <div className="absolute bottom-4 right-4 left-4 text-white z-10 space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`px-3 py-1 rounded-xl text-xs font-black backdrop-blur-md ${
+                    place.type === 'hussainiya'
+                      ? 'bg-amber-500/90 text-white'
+                      : place.type === 'shrine'
+                      ? 'bg-teal-500/90 text-white'
+                      : 'bg-emerald-600/90 text-white'
+                  }`}
+                >
+                  {place.type === 'hussainiya' ? 'حسینیه' : place.type === 'shrine' ? 'بقعه متبرکه' : 'مسجد'}
+                </span>
+                {place.isHistorical && (
+                  <span className="px-2.5 py-1 rounded-xl text-xs font-bold bg-[#C26D47]/90 text-white backdrop-blur-md">
+                    بافت کهن دزفول
+                  </span>
+                )}
+              </div>
+
+              <h1 className="text-xl md:text-3xl font-black">{place.name}</h1>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs md:text-sm text-stone-200">
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-4 h-4 text-[#C26D47]" />
+                  <span>محله {place.neighborhood}</span>
+                </span>
+                {distStr && (
+                  <span className="px-2 py-0.5 rounded-lg bg-white/20 backdrop-blur-md text-emerald-300 font-bold">
+                    فاصله: {distStr}
+                  </span>
+                )}
+                <span className="flex items-center gap-1 text-emerald-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>{place.isCurrentlyOpen ? 'دایر و باز' : 'اقامه نماز در اوقات شرعی'}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ۲. بخش وسط: دکمه‌های عملیاتی و مسیریابی با لوگوی واقعی اپلیکیشن‌ها */}
+        <div className="bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="font-extrabold text-sm text-stone-900 dark:text-white flex items-center gap-2">
+              <NavigationIcon className="w-4 h-4 text-[#0E7C86]" />
+              <span>مسیریابی هوشمند با اپلیکیشن‌های نقشه</span>
+            </h3>
+            {place.phone && (
+              <a
+                href={`tel:${place.phone}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-100 dark:bg-slate-800 text-[#0E7C86] font-bold text-xs hover:bg-[#0E7C86] hover:text-white transition-colors"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>تماس ({toPersianDigits(place.phone)})</span>
+              </a>
             )}
           </div>
 
-          {place.phone ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {/* نشان (سبز) */}
             <a
-              href={`tel:${place.phone}`}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-[#F7F3EC] dark:bg-slate-700 hover:bg-[#E4DCB] dark:hover:bg-slate-600 text-[#1F2430] dark:text-slate-100 border border-[#DDD5C5] dark:border-slate-600 py-2.5 px-3 rounded-2xl text-xs font-bold transition-all"
+              href={routing.neshan}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2.5 p-3 rounded-2xl bg-[#00C853]/10 hover:bg-[#00C853]/20 border border-[#00C853]/30 text-[#00C853] dark:text-[#00E676] font-bold text-xs md:text-sm transition-all active:scale-95 shadow-2xs"
             >
-              <Phone className="w-4 h-4 text-[#0E7C86] dark:text-teal-400" />
-              <span>تماس ({toPersianDigits(place.phone)})</span>
+              <div className="w-6 h-6 rounded-full bg-[#00C853] text-white flex items-center justify-center text-xs font-black shadow-xs">
+                ن
+              </div>
+              <span>مسیریاب نشان</span>
             </a>
-          ) : (
-            <button
-              onClick={handleShare}
-              className="flex-1 flex items-center justify-center gap-1.5 bg-[#F7F3EC] dark:bg-slate-700 hover:bg-[#E4DCB] dark:hover:bg-slate-600 text-[#1F2430] dark:text-slate-100 border border-[#DDD5C5] dark:border-slate-600 py-2.5 px-3 rounded-2xl text-xs font-bold transition-all"
+
+            {/* بلد (آبی) */}
+            <a
+              href={routing.balad}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2.5 p-3 rounded-2xl bg-[#1E88E5]/10 hover:bg-[#1E88E5]/20 border border-[#1E88E5]/30 text-[#1E88E5] dark:text-[#42A5F5] font-bold text-xs md:text-sm transition-all active:scale-95 shadow-2xs"
             >
-              <Share2 className="w-4 h-4 text-[#B4552D] dark:text-amber-400" />
-              <span>ارسال به دوستان</span>
-            </button>
-          )}
-        </div>
+              <div className="w-6 h-6 rounded-full bg-[#1E88E5] text-white flex items-center justify-center text-xs font-black shadow-xs">
+                ب
+              </div>
+              <span>مسیریاب بلد</span>
+            </a>
 
-        {/* ۳. معرفی کوتاه و پیشینه */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-[#E0D8C8] dark:border-slate-700 shadow-xs space-y-2">
-          <div className="flex items-center gap-2 text-sm font-black text-[#1F2430] dark:text-slate-100">
-            <Building2 className="w-4 h-4 text-[#0E7C86] dark:text-teal-400" />
-            <h2>معرفی و پیشینه تاریخی</h2>
+            {/* گوگل مپ (رنگی) */}
+            <a
+              href={routing.googleMaps}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2.5 p-3 rounded-2xl bg-[#EA4335]/10 hover:bg-[#EA4335]/20 border border-[#EA4335]/30 text-[#EA4335] dark:text-[#FF8A80] font-bold text-xs md:text-sm transition-all active:scale-95 shadow-2xs"
+            >
+              <div className="w-6 h-6 rounded-full bg-[#EA4335] text-white flex items-center justify-center text-xs font-black shadow-xs">
+                G
+              </div>
+              <span>Google Maps</span>
+            </a>
+
+            {/* ویز (بنفش/آبی) */}
+            <a
+              href={`https://waze.com/ul?ll=${place.coordinates[0]},${place.coordinates[1]}&navigate=yes`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2.5 p-3 rounded-2xl bg-[#33CCFF]/10 hover:bg-[#33CCFF]/20 border border-[#33CCFF]/30 text-[#0099CC] dark:text-[#80D8FF] font-bold text-xs md:text-sm transition-all active:scale-95 shadow-2xs"
+            >
+              <div className="w-6 h-6 rounded-full bg-[#33CCFF] text-stone-900 flex items-center justify-center text-xs font-black shadow-xs">
+                W
+              </div>
+              <span>Waze</span>
+            </a>
           </div>
-          <p className="text-xs sm:text-sm text-[#52525B] dark:text-slate-300 leading-relaxed">
-            {place.description}
-          </p>
-          {place.historySummary && (
-            <div className="p-3 bg-[#F7F3EC] dark:bg-slate-700/60 rounded-2xl border border-[#DDD5C5] dark:border-slate-600 text-xs text-[#52525B] dark:text-slate-300 space-y-1">
-              <span className="font-bold text-[#B4552D] dark:text-amber-400">قدمت و معماری: </span>
-              <span>{place.historySummary}</span>
-              {place.establishedYear && (
-                <div className="text-[11px] text-[#71717A] dark:text-slate-400 mt-1 font-bold">
-                  دوره ساخت: {place.establishedYear}
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* ۴. گرید امکانات (Features Grid) */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-[#E0D8C8] dark:border-slate-700 shadow-xs space-y-3">
-          <h2 className="text-sm font-black text-[#1F2430] dark:text-slate-100 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#E5B555]" />
-            <span>امکانات و خدمات فعال</span>
-          </h2>
+        {/* ۳. بخش امکانات */}
+        <div className="bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-3">
+          <h3 className="font-extrabold text-sm text-stone-900 dark:text-white flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#C26D47]" />
+            <span>امکانات و ویژگی‌های ساختمانی و رفاهی</span>
+          </h3>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-            {[
-              { label: 'نماز جماعت یومیه', active: true, icon: Clock },
-              { label: 'وضوخانه و سرویس', active: place.features.wuduFacilities, icon: Droplets },
-              { label: 'بخش مجزای بانوان', active: place.features.ladiesSection, icon: Users },
-              { label: 'پارکینگ خودرو', active: place.features.parking, icon: Car },
-              { label: 'دسترسی سالمند و معلول', active: place.features.wheelchairAccess, icon: Accessibility },
-              { label: 'کتابخانه مذهبی', active: place.features.library, icon: BookOpen },
-              { label: 'کلاس قرآن و کانون', active: place.features.quranClasses, icon: BookOpen },
-              { label: 'صندوق خیریه محلی', active: true, icon: HeartHandshake },
-              { label: `شوادون سنتی (${toPersianDigits(place.features.shovadoonDepthMeters || 12)}م)`, active: place.features.shovadoon, icon: Warehouse },
-            ].map((f, i) => {
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {featuresList.map((f) => {
               const Icon = f.icon;
               return (
                 <div
-                  key={i}
-                  className={`p-2.5 rounded-2xl border flex items-center justify-between ${
+                  key={f.id}
+                  className={`p-3 rounded-2xl border flex items-center gap-2.5 transition-all ${
                     f.active
-                      ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-950 dark:text-emerald-300 font-bold'
-                      : 'bg-stone-50 dark:bg-slate-700/40 border-stone-200 dark:border-slate-700 text-stone-400 dark:text-slate-500'
+                      ? f.color
+                      : 'bg-stone-50 dark:bg-slate-800/40 border-stone-200/60 dark:border-slate-800 text-stone-400 opacity-60'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <Icon className={`w-3.5 h-3.5 shrink-0 ${f.active ? 'text-emerald-700 dark:text-emerald-400' : 'text-stone-400 dark:text-slate-500'}`} />
-                    <span className="truncate text-[11px]">{f.label}</span>
-                  </div>
-                  {f.active ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 stroke-[3]" />
-                  ) : (
-                    <X className="w-3.5 h-3.5 text-stone-400 dark:text-slate-500 shrink-0" />
-                  )}
+                  <Icon className="w-5 h-5 shrink-0" />
+                  <span className="text-xs font-bold leading-tight">{f.label}</span>
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* ۵. ساعات نماز جماعت (۳ کارت صبح، ظهر، مغرب) */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-[#E0D8C8] dark:border-slate-700 shadow-xs space-y-3">
-          <h2 className="text-sm font-black text-[#1F2430] dark:text-slate-100 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-[#0E7C86] dark:text-teal-400" />
-            <span>ساعات اقامه نماز جماعت</span>
-          </h2>
+        {/* ۴. بخش مراسمات این مکان */}
+        {events.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-3">
+            <h3 className="font-extrabold text-sm text-stone-900 dark:text-white flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-[#0E7C86]" />
+              <span>برنامه مراسمات و هیئات مذهبی این مکان</span>
+            </h3>
 
-          <div className="grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="p-3 bg-[#F7F3EC] dark:bg-slate-700/60 rounded-2xl border border-[#DDD5C5] dark:border-slate-600">
-              <span className="text-[11px] text-[#71717A] dark:text-slate-400 block font-bold">صبح</span>
-              <span className="text-sm font-black text-[#1F2430] dark:text-slate-100 mt-1 block">
-                {toPersianDigits(DEZFUL_PRAYER_TIMES.fajr)}
-              </span>
-              <span className="text-[10px] text-[#0E7C86] dark:text-teal-400 font-bold">اقامه اول وقت</span>
-            </div>
-
-            <div className="p-3 bg-[#F7F3EC] dark:bg-slate-700/60 rounded-2xl border border-[#DDD5C5] dark:border-slate-600">
-              <span className="text-[11px] text-[#71717A] dark:text-slate-400 block font-bold">ظهر و عصر</span>
-              <span className="text-sm font-black text-[#1F2430] dark:text-slate-100 mt-1 block">
-                {toPersianDigits(DEZFUL_PRAYER_TIMES.dhuhr)}
-              </span>
-              <span className="text-[10px] text-[#0E7C86] dark:text-teal-400 font-bold">همراه با تعقیبات</span>
-            </div>
-
-            <div className="p-3 bg-[#0E7C86]/10 dark:bg-teal-950/40 rounded-2xl border border-[#0E7C86] dark:border-teal-500 ring-1 ring-[#0E7C86] dark:ring-teal-500">
-              <span className="text-[11px] text-[#0E7C86] dark:text-teal-300 block font-black">مغرب و عشاء (برجسته)</span>
-              <span className="text-sm font-black text-[#1F2430] dark:text-slate-100 mt-1 block">
-                {toPersianDigits(DEZFUL_PRAYER_TIMES.maghrib)}
-              </span>
-              <span className="text-[10px] text-[#B4552D] dark:text-amber-400 font-bold">نوبت بعدی</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ۶. برنامه‌های هفتگی ثابت */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-[#E0D8C8] dark:border-slate-700 shadow-xs space-y-3">
-          <h2 className="text-sm font-black text-[#1F2430] dark:text-slate-100 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-[#B4552D] dark:text-amber-400" />
-            <span>برنامه‌های ثابت هفتگی</span>
-          </h2>
-
-          <div className="space-y-2 text-xs">
-            {[
-              { day: 'شنبه‌ها', title: 'جلسه انس با قرآن کریم و آموزش قرائت', time: 'ساعت ۱۸:۳۰' },
-              { day: 'یکشنبه‌ها', title: 'حلقه معرفتی و تربیتی صالحین جوانان', time: 'ساعت ۲۰:۰۰' },
-              { day: 'سه‌شنبه‌ها', title: 'قرائت دعای پرفیض توسل', time: 'بعد از نماز عشاء' },
-              { day: 'پنج‌شنبه‌ها', title: 'قرائت دعای کمیل و روضه‌خوانی هفتگی', time: 'ساعت ۲۱:۳۰', highlight: true },
-              { day: 'جمعه‌ها', title: 'قرائت دعای ندبه و صرف صبحانه نذری', time: 'ساعت ۰۶:۳۰ صبح' },
-            ].map((prog, i) => (
-              <div
-                key={i}
-                className={`p-3 rounded-2xl border flex items-center justify-between ${
-                  prog.highlight
-                    ? 'bg-amber-50/80 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-300 font-bold'
-                    : 'bg-[#F7F3EC] dark:bg-slate-700/60 border-[#DDD5C5] dark:border-slate-600 text-[#52525B] dark:text-slate-300'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="bg-white dark:bg-slate-800 px-2 py-0.5 rounded-lg text-[10px] font-black border border-[#DDD5C5] dark:border-slate-600 text-[#1F2430] dark:text-slate-200">
-                    {prog.day}
-                  </span>
-                  <span className="font-bold">{prog.title}</span>
-                </div>
-                <span className="text-[11px] font-black text-[#0E7C86] dark:text-teal-400 shrink-0">
-                  {toPersianDigits(prog.time)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ۷. مراسمات پیش‌رو */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-[#E0D8C8] dark:border-slate-700 shadow-xs space-y-3">
-          <h2 className="text-sm font-black text-[#1F2430] dark:text-slate-100 flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-[#0E7C86] dark:text-teal-400" />
-            <span>مراسمات پیش‌رو در این مکان</span>
-          </h2>
-
-          {placeEvents.length === 0 ? (
-            <div className="p-6 text-center bg-[#F7F3EC] dark:bg-slate-700/60 rounded-2xl text-xs text-[#71717A] dark:text-slate-400">
-              در حال حاضر رویداد خاصی برای روزهای آینده ثبت نشده است.
-            </div>
-          ) : (
             <div className="space-y-2.5">
-              {placeEvents.map((ev) => {
-                const isReminder = savedReminderIds.includes(ev.id);
-                return (
-                  <div
-                    key={ev.id}
-                    className="p-3.5 rounded-2xl bg-[#F7F3EC] dark:bg-slate-700/60 border border-[#DDD5C5] dark:border-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="bg-[#B4552D] text-white px-2 py-0.5 rounded-md text-[10px] font-black">
-                          {ev.timeBadge}
-                        </span>
-                        <h3 className="font-black text-[#1F2430] dark:text-slate-100">{ev.title}</h3>
-                      </div>
-                      <div className="flex items-center gap-3 text-[11px] text-[#71717A] dark:text-slate-400 mt-1">
-                        {ev.speaker && <span>سخنران: {ev.speaker}</span>}
-                        {ev.eulogist && <span>مداح: {ev.eulogist}</span>}
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => handleToggleReminder(ev.id, ev.title)}
-                      className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs border transition-all ${
-                        isReminder
-                          ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700'
-                          : 'bg-white dark:bg-slate-800 text-[#52525B] dark:text-slate-300 border-[#DDD5C5] dark:border-slate-600 hover:text-[#0E7C86]'
-                      }`}
-                    >
-                      {isReminder ? <BellRing className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" /> : <Bell className="w-3.5 h-3.5" />}
-                      <span>{isReminder ? 'یادآور فعال' : 'یادآوری'}</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* ۸. نشانی و دسترسی محلی */}
-        <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-[#E0D8C8] dark:border-slate-700 shadow-xs space-y-2">
-          <h2 className="text-sm font-black text-[#1F2430] dark:text-slate-100 flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-[#B4552D] dark:text-amber-400" />
-            <span>نشانی دقیق و نشانه‌های شهری دزفول</span>
-          </h2>
-          <p className="text-xs text-[#52525B] dark:text-slate-300 font-bold">{place.address}</p>
-          <div className="p-3 bg-[#F7F3EC] dark:bg-slate-700/60 rounded-2xl border border-[#DDD5C5] dark:border-slate-600 text-xs text-[#71717A] dark:text-slate-400 space-y-1">
-            <p>• راهنمای دسترسی: دسترسی سریع از خیابان‌های اصلی و بافت کهن دزفول.</p>
-            <p>• مختصات جغرافیایی: {toPersianDigits(place.coordinates[0])} , {toPersianDigits(place.coordinates[1])}</p>
-          </div>
-        </div>
-
-        {/* ۹. اماکن نزدیک و همسایه */}
-        {nearbyPlaces.length > 0 && (
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-5 border border-[#E0D8C8] dark:border-slate-700 shadow-xs space-y-3">
-            <h2 className="text-sm font-black text-[#1F2430] dark:text-slate-100 flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-[#0E7C86] dark:text-teal-400" />
-              <span>مساجد و حسینیه‌های همسایه در محله {place.neighborhood}</span>
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {nearbyPlaces.map((np) => (
+              {events.map((ev) => (
                 <div
-                  key={np.id}
-                  onClick={() => navigate(`/place/${np.id}`)}
-                  className="p-3 rounded-2xl bg-[#F7F3EC] dark:bg-slate-700/60 hover:bg-[#E4DCB] dark:hover:bg-slate-700 border border-[#DDD5C5] dark:border-slate-600 transition-all cursor-pointer flex items-center justify-between gap-2"
+                  key={ev.id}
+                  className="p-3.5 rounded-2xl bg-stone-50 dark:bg-slate-800/60 border border-stone-200/80 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <img
-                      src={np.image}
-                      alt={np.name}
-                      referrerPolicy="no-referrer"
-                      className="w-10 h-10 rounded-xl object-cover"
-                    />
-                    <div>
-                      <h4 className="text-xs font-black text-[#1F2430] dark:text-slate-100">{np.name}</h4>
-                      <p className="text-[10px] text-[#71717A] dark:text-slate-400">{np.neighborhood}</p>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-stone-900 dark:text-white">
+                        {ev.title}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-[#0E7C86]/10 text-[#0E7C86] text-[10px] font-bold">
+                        {ev.timeBadge}
+                      </span>
                     </div>
+                    <p className="text-xs text-stone-500 dark:text-stone-400">
+                      با نوای / سخنرانی: {ev.speaker || ev.eulogist || 'مادحین اهل بیت (ع)'}
+                    </p>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-[#71717A] dark:text-slate-400 rotate-180" />
+
+                  <div className="flex items-center gap-2 text-xs font-bold text-stone-700 dark:text-stone-300">
+                    <Clock className="w-3.5 h-3.5 text-[#C26D47]" />
+                    <span>{ev.dayOfWeek} - ساعت {toPersianDigits(ev.timeStr)}</span>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ۱۰. دکمه اصلاح و تکمیل اطلاعات */}
-        <div className="p-4 bg-amber-50 dark:bg-amber-950/40 rounded-3xl border border-amber-200 dark:border-amber-800 text-center space-y-2">
-          <p className="text-xs text-amber-900 dark:text-amber-300 font-bold">
-            آیا خادم یا عضو هیئت‌امنای این مکان هستید یا اطلاعات تکمیلی دارید؟
-          </p>
-          <button
-            onClick={() => showToast('درخواست شما برای بررسی خادمان ارسال شد.')}
-            className="bg-[#B4552D] hover:bg-[#964220] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition-all"
-          >
-            اصلاح / تکمیل مشخصات مکان
-          </button>
+        {/* ۵. بخش اطلاعات بیشتر: آکاردئون */}
+        <div className="bg-white dark:bg-slate-900 border border-stone-200/90 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-3">
+          <h3 className="font-extrabold text-sm text-stone-900 dark:text-white flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-[#C26D47]" />
+            <span>اطلاعات تکمیلی، آدرس و پیشینه</span>
+          </h3>
+
+          <div className="space-y-2">
+            {/* آدرس کامل */}
+            <div className="border border-stone-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+              <button
+                onClick={() => setActiveAccordion(activeAccordion === 'address' ? null : 'address')}
+                className="w-full px-4 py-3 bg-stone-50 dark:bg-slate-800/60 flex items-center justify-between text-xs md:text-sm font-bold text-stone-800 dark:text-stone-200"
+              >
+                <span>آدرس دقیق و دسترسی محلی</span>
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform ${
+                    activeAccordion === 'address' ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {activeAccordion === 'address' && (
+                <div className="p-4 text-xs md:text-sm text-stone-600 dark:text-stone-300 bg-white dark:bg-slate-900 leading-relaxed">
+                  {place.address}
+                </div>
+              )}
+            </div>
+
+            {/* پیشینه و تاریخچه */}
+            {(place.historySummary || place.description) && (
+              <div className="border border-stone-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+                <button
+                  onClick={() => setActiveAccordion(activeAccordion === 'history' ? null : 'history')}
+                  className="w-full px-4 py-3 bg-stone-50 dark:bg-slate-800/60 flex items-center justify-between text-xs md:text-sm font-bold text-stone-800 dark:text-stone-200"
+                >
+                  <span>قدمت تاریخی و هویت معماری دزفول</span>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      activeAccordion === 'history' ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+                {activeAccordion === 'history' && (
+                  <div className="p-4 text-xs md:text-sm text-stone-600 dark:text-stone-300 bg-white dark:bg-slate-900 leading-relaxed space-y-2">
+                    <p>{place.historySummary || place.description}</p>
+                    {place.establishedYear && (
+                      <p className="text-xs text-[#C26D47] font-bold">
+                        دوره تاریخی ساخت: {place.establishedYear}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ساعات کاری و اقامه نماز */}
+            <div className="border border-stone-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+              <button
+                onClick={() => setActiveAccordion(activeAccordion === 'hours' ? null : 'hours')}
+                className="w-full px-4 py-3 bg-stone-50 dark:bg-slate-800/60 flex items-center justify-between text-xs md:text-sm font-bold text-stone-800 dark:text-stone-200"
+              >
+                <span>ساعات اقامه نماز و ظرفیت</span>
+                <ChevronDown
+                  className={`w-4 h-4 transition-transform ${
+                    activeAccordion === 'hours' ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {activeAccordion === 'hours' && (
+                <div className="p-4 text-xs md:text-sm text-stone-600 dark:text-stone-300 bg-white dark:bg-slate-900 space-y-1.5">
+                  <p>• {place.openingHours}</p>
+                  <p>• ظرفیت تخمینی: {toPersianDigits(place.capacity)} نفر</p>
+                  {place.imamOrCustodian && <p>• امام جماعت / تولیت: {place.imamOrCustodian}</p>}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        </div>
-      </div>
+      </main>
+
+      <Navigation
+        activeTab="map"
+        onTabChange={(tab) => {
+          if (tab === 'home') navigate('/');
+          else if (tab === 'calendar') navigate('/calendar');
+          else if (tab === 'map') navigate('/?tab=map');
+        }}
+        todayEventsCount={allEvents.filter((e) => e.isToday || e.isTonight).length}
+      />
     </div>
   );
 };
 
+export default PlaceDetailPage;

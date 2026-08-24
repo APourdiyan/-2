@@ -1,98 +1,69 @@
 import { create } from 'zustand';
-import { devtools } from 'zustand/middleware';
-import { Place } from '../types';
+import { Place, EventItem } from '../types';
 
-/**
- * ساختار State و Actionهای سراسری نرم‌افزار نقشه مذهبی دزفول
- */
-export interface UserCoordinates {
-  lat: number;
-  lng: number;
-}
-
-interface AppState {
-  // State
+export interface AppState {
   selectedPlace: Place | null;
-  userLocation: UserCoordinates | null;
+  userLocation: { lat: number; lng: number } | null;
   activeFilters: string[];
   isDarkMode: boolean;
+  searchQuery: string;
+  activeTab: 'home' | 'search' | 'events' | 'profile';
+  isLoading: boolean;
+  error: string | null;
+  nearbyPlaces: Place[];
+  todayEvents: EventItem[];
 
   // Actions
   setSelectedPlace: (place: Place | null) => void;
-  setUserLocation: (location: UserCoordinates | null) => void;
-  toggleFilter: (filterId: string) => void;
+  setUserLocation: (location: { lat: number; lng: number } | null) => void;
+  toggleFilter: (filter: string) => void;
   toggleDarkMode: () => void;
+  setSearchQuery: (query: string) => void;
+  setActiveTab: (tab: 'home' | 'search' | 'events' | 'profile') => void;
+  setLoading: (isLoading: boolean) => void;
+  setError: (error: string | null) => void;
+  setNearbyPlaces: (places: Place[]) => void;
+  setTodayEvents: (events: EventItem[]) => void;
   resetFilters: () => void;
 }
 
-export const useAppStore = create<AppState>()(
-  devtools(
-    (set) => ({
-      // وضعیت اولیه
-      selectedPlace: null,
-      userLocation: null,
-      activeFilters: ['all'],
-      isDarkMode: false,
+export const useAppStore = create<AppState>((set) => ({
+  selectedPlace: null,
+  userLocation: null,
+  activeFilters: [],
+  isDarkMode: typeof window !== 'undefined' ? document.documentElement.classList.contains('dark') : false,
+  searchQuery: '',
+  activeTab: 'home',
+  isLoading: false,
+  error: null,
+  nearbyPlaces: [],
+  todayEvents: [],
 
-      // تغییر مکان انتخاب شده
-      setSelectedPlace: (place) =>
-        set(
-          () => ({ selectedPlace: place }),
-          false,
-          'setSelectedPlace'
-        ),
-
-      // به‌روزرسانی موقعیت جغرافیایی کاربر
-      setUserLocation: (location) =>
-        set(
-          () => ({ userLocation: location }),
-          false,
-          'setUserLocation'
-        ),
-
-      // فعال/غیرفعال‌سازی فیلترهای دسته‌بندی
-      toggleFilter: (filterId) =>
-        set(
-          (state) => {
-            if (filterId === 'all') {
-              return { activeFilters: ['all'] };
-            }
-
-            const current = state.activeFilters.filter((f) => f !== 'all');
-            const exists = current.includes(filterId);
-
-            let updated: string[];
-            if (exists) {
-              updated = current.filter((f) => f !== filterId);
-              if (updated.length === 0) {
-                updated = ['all'];
-              }
-            } else {
-              updated = [...current, filterId];
-            }
-
-            return { activeFilters: updated };
-          },
-          false,
-          'toggleFilter'
-        ),
-
-      // تغییر تم تاریک/روشن
-      toggleDarkMode: () =>
-        set(
-          (state) => ({ isDarkMode: !state.isDarkMode }),
-          false,
-          'toggleDarkMode'
-        ),
-
-      // بازنشانی تمام فیلترها به حالت پیش‌فرض
-      resetFilters: () =>
-        set(
-          () => ({ activeFilters: ['all'] }),
-          false,
-          'resetFilters'
-        ),
+  setSelectedPlace: (place) => set({ selectedPlace: place }),
+  setUserLocation: (location) => set({ userLocation: location }),
+  toggleFilter: (filter) =>
+    set((state) => ({
+      activeFilters: state.activeFilters.includes(filter)
+        ? state.activeFilters.filter((f) => f !== filter)
+        : [...state.activeFilters, filter]
+    })),
+  toggleDarkMode: () =>
+    set((state) => {
+      const nextMode = !state.isDarkMode;
+      if (typeof document !== 'undefined') {
+        if (nextMode) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+      return { isDarkMode: nextMode };
     }),
-    { name: 'DezfulReligiousMapStore' }
-  )
-);
+  setSearchQuery: (query) => set({ searchQuery: query }),
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  setLoading: (isLoading) => set({ isLoading }),
+  setError: (error) => set({ error }),
+  setNearbyPlaces: (places) => set({ nearbyPlaces: places }),
+  setTodayEvents: (events) => set({ todayEvents: events }),
+  resetFilters: () => set({ activeFilters: [] })
+}));
